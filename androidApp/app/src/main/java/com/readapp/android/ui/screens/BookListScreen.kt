@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -49,9 +50,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.ColorPainter
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.readapp.android.model.Book
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -411,16 +417,55 @@ private fun BookListItem(
                 modifier = Modifier.padding(14.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
-            ) {
+            ) { 
                 val coverInitial = book.name?.firstOrNull()?.toString() ?: "书"
-                Box(
-                    modifier = Modifier
-                        .size(64.dp, 84.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(text = coverInitial, style = MaterialTheme.typography.titleLarge)
+                val context = LocalContext.current
+                val coverModifier = Modifier
+                    .size(64.dp, 84.dp)
+                    .clip(RoundedCornerShape(12.dp))
+
+                Box(modifier = coverModifier) {
+                    if (!book.coverUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(context)
+                                .data(book.coverUrl)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = "${book.name ?: "书籍"}封面",
+                            modifier = Modifier.matchParentSize(),
+                            contentScale = ContentScale.Crop,
+                            placeholder = ColorPainter(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)),
+                            error = ColorPainter(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
+                        )
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .background(
+                                    Brush.verticalGradient(
+                                        listOf(
+                                            Color.Transparent,
+                                            MaterialTheme.colorScheme.surface.copy(alpha = 0.18f)
+                                        )
+                                    )
+                                )
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.32f),
+                                            MaterialTheme.colorScheme.secondary.copy(alpha = 0.28f)
+                                        )
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(text = coverInitial, style = MaterialTheme.typography.titleLarge)
+                        }
+                    }
                 }
                 Column(
                     modifier = Modifier.weight(1f),
