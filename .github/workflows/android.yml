@@ -24,6 +24,22 @@ jobs:
         run: |
           yes | sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
+      - name: Ensure debug keystore exists
+        run: |
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkeypair \
+              -alias androiddebugkey \
+              -keypass android \
+              -storepass android \
+              -keystore ~/.android/debug.keystore \
+              -dname "CN=Android Debug,O=Android,C=US" \
+              -validity 10000 \
+              -storetype JKS \
+              -keyalg RSA \
+              -keysize 2048
+          fi
+
       - name: Build release APK
         uses: gradle/gradle-build-action@v2
         with:

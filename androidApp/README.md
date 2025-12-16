@@ -34,3 +34,4 @@
 1. 使用 Android Studio Hedgehog 或更高版本打开 `androidApp` 目录。
 2. 在 `app/build.gradle.kts` 中已启用 Compose 与所需依赖，首次同步会自动下载。
 3. 运行前在登录页填写服务器地址（默认 `http://127.0.0.1:8080/api/5`），如有公网地址可同时填写，保存后登录即可刷新书架。
+4. CI 生成的 `app-release.apk` 使用 Android 默认 debug keystore 进行签名，可直接在设备上安装验证。
