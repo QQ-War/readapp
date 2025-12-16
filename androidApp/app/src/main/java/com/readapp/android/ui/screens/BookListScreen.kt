@@ -173,7 +173,7 @@ fun BookListScreen(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            item {
+            items(1) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = query.value,
@@ -192,7 +192,7 @@ fun BookListScreen(
             }
 
             if (showSettings.value) {
-                item {
+                items(1) {
                     ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                         Column(
                             modifier = Modifier.padding(16.dp),
@@ -235,7 +235,7 @@ fun BookListScreen(
                 }
             }
 
-            item {
+            items(1) {
                 Text(text = "我的书籍", style = MaterialTheme.typography.titleMedium)
             }
 
@@ -243,7 +243,7 @@ fun BookListScreen(
                 BookListItem(book = book, onBookClick = { onBookClick(book) })
             }
 
-            item { Spacer(modifier = Modifier.height(8.dp)) }
+            items(1) { Spacer(modifier = Modifier.height(8.dp)) }
         }
     }
 }
