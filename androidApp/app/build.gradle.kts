@@ -1,3 +1,5 @@
+import java.io.File
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -22,7 +24,7 @@ android {
     signingConfigs {
         val keystoreDir = System.getenv("XDG_CONFIG_HOME")
             ?.let { file(it).resolve(".android") }
-            ?: file(System.getProperty("user.home"), ".android")
+            ?: File(System.getProperty("user.home")).resolve(".android")
         val debugKeystore = keystoreDir.resolve("debug.keystore")
 
         getByName("debug") {
