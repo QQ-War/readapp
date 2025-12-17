@@ -53,10 +53,9 @@ class ReadViewModel(private val context: Context) : ViewModel() {
             val speakerMapping = preferences.speakerMapping.first()
             val speechRate = preferences.speechRate.first()
             val preloadSegments = preferences.preloadSegments.first()
-            val normalizedServer = normalizeServerEndpoint(server)
             _uiState.update {
                 it.copy(
-                    serverUrl = normalizedServer,
+                    serverUrl = server,
                     publicServerUrl = public,
                     accessToken = token,
                     username = username,
@@ -112,18 +111,10 @@ class ReadViewModel(private val context: Context) : ViewModel() {
         })
     }
 
-    private fun normalizeServerEndpoint(server: String): String {
-        if (server.isBlank()) return "http://127.0.0.1:8080/api/5"
-        return if (server.contains("/api/")) server else "$server/api/5"
-    }
-
-    private fun currentServerEndpoint(): String = normalizeServerEndpoint(_uiState.value.serverUrl)
-
     fun updateServers(serverUrl: String, publicUrl: String?) {
-        val normalizedServer = normalizeServerEndpoint(serverUrl)
-        _uiState.update { it.copy(serverUrl = normalizedServer, publicServerUrl = publicUrl.orEmpty()) }
+        _uiState.update { it.copy(serverUrl = serverUrl, publicServerUrl = publicUrl.orEmpty()) }
         viewModelScope.launch(Dispatchers.IO) {
-            preferences.saveServerUrl(normalizedServer)
+            preferences.saveServerUrl(serverUrl)
             preferences.savePublicServerUrl(publicUrl.orEmpty())
         }
     }
@@ -131,7 +122,7 @@ class ReadViewModel(private val context: Context) : ViewModel() {
     fun login(username: String, password: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-            val baseUrl = currentServerEndpoint()
+            val baseUrl = _uiState.value.serverUrl.ifBlank { "http://127.0.0.1:8080/api/5" }
             val result = repository.login(baseUrl, _uiState.value.publicServerUrl.ifBlank { null }, username, password)
             result.fold(
                 onSuccess = { response ->
@@ -160,7 +151,7 @@ class ReadViewModel(private val context: Context) : ViewModel() {
             val token = _uiState.value.accessToken
             if (token.isBlank()) return@launch
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-            val baseUrl = currentServerEndpoint()
+            val baseUrl = _uiState.value.serverUrl.ifBlank { "http://127.0.0.1:8080/api/5" }
             val result = repository.fetchBooks(baseUrl, _uiState.value.publicServerUrl.ifBlank { null }, token)
             result.fold(
                 onSuccess = { books ->
@@ -197,7 +188,7 @@ class ReadViewModel(private val context: Context) : ViewModel() {
     fun fetchChapterList(book: Book) {
         viewModelScope.launch {
             val token = _uiState.value.accessToken
-            val baseUrl = currentServerEndpoint()
+            val baseUrl = _uiState.value.serverUrl.ifBlank { "http://127.0.0.1:8080/api/5" }
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             val result = repository.fetchChapterList(
                 baseUrl,
@@ -227,7 +218,7 @@ class ReadViewModel(private val context: Context) : ViewModel() {
         val book = _uiState.value.selectedBook ?: return
         viewModelScope.launch {
             val token = _uiState.value.accessToken
-            val baseUrl = currentServerEndpoint()
+            val baseUrl = _uiState.value.serverUrl.ifBlank { "http://127.0.0.1:8080/api/5" }
             _uiState.update { it.copy(isLoading = true, errorMessage = null, isSpeaking = false) }
             val result = repository.fetchChapterContent(
                 baseUrl,
@@ -266,7 +257,7 @@ class ReadViewModel(private val context: Context) : ViewModel() {
         viewModelScope.launch {
             val token = _uiState.value.accessToken
             if (token.isBlank()) return@launch
-            val baseUrl = currentServerEndpoint()
+            val baseUrl = _uiState.value.serverUrl.ifBlank { "http://127.0.0.1:8080/api/5" }
             val ttsList = repository.fetchTtsEngines(baseUrl, _uiState.value.publicServerUrl.ifBlank { null }, token)
             ttsList.onSuccess { list ->
                 _uiState.update { it.copy(ttsEngines = list) }
@@ -290,7 +281,7 @@ class ReadViewModel(private val context: Context) : ViewModel() {
         viewModelScope.launch {
             val token = _uiState.value.accessToken
             val book = _uiState.value.selectedBook ?: return@launch
-            val baseUrl = currentServerEndpoint()
+            val baseUrl = _uiState.value.serverUrl.ifBlank { "http://127.0.0.1:8080/api/5" }
             val index = _uiState.value.currentChapterIndex ?: return@launch
             val currentContent = chapterContentCache[index] ?: _uiState.value.currentChapterContent
             val currentParagraphs = _uiState.value.currentParagraphs.ifEmpty { parseParagraphs(currentContent) }
@@ -607,7 +598,7 @@ class ReadViewModel(private val context: Context) : ViewModel() {
         }
         val paragraphs = parseParagraphs(content)
         val token = _uiState.value.accessToken
-        val baseUrl = currentServerEndpoint()
+        val baseUrl = _uiState.value.serverUrl.ifBlank { "http://127.0.0.1:8080/api/5" }
 
         if (_uiState.value.isSpeaking && token.isNotBlank() && paragraphs.isNotEmpty()) {
             val existing = _uiState.value.speechSegments.any { it.chapterIndex == nextIndex }
@@ -706,7 +697,7 @@ class ReadViewModel(private val context: Context) : ViewModel() {
         val cached = chapterContentCache[index]
         if (cached != null) return cached
         val token = _uiState.value.accessToken
-        val baseUrl = currentServerEndpoint()
+        val baseUrl = _uiState.value.serverUrl.ifBlank { "http://127.0.0.1:8080/api/5" }
         val result = repository.fetchChapterContent(
             baseUrl,
             _uiState.value.publicServerUrl.ifBlank { null },
