@@ -5,7 +5,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
@@ -219,17 +222,20 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             errorMessage = null
             val normalized = if (server.contains("/api/")) server else "$server/api/5"
             val result = repository.login(normalized, publicServerAddress.ifBlank { null }, username, password)
-            result.onSuccess {
-                accessToken = it.accessToken
+            result.onFailure { error ->
+                errorMessage = error.message
+            }
+
+            val loginData = result.getOrNull()
+            if (loginData != null) {
+                accessToken = loginData.accessToken
                 this@BookViewModel.username = username
-                preferences.saveAccessToken(it.accessToken)
+                preferences.saveAccessToken(loginData.accessToken)
                 preferences.saveUsername(username)
                 preferences.saveServerUrl(normalized)
                 loadTtsEngines()
                 refreshBooks()
                 onSuccess()
-            }.onFailure { error ->
-                errorMessage = error.message
             }
             isLoading = false
         }
@@ -293,8 +299,10 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             enginesResult.onSuccess {
                 availableTtsEngines = it
             }
+
             val defaultResult = repository.fetchDefaultTts(currentServerEndpoint(), publicServerAddress.ifBlank { null }, accessToken)
-            defaultResult.onSuccess { defaultId ->
+            val defaultId = defaultResult.getOrNull()
+            if (defaultId != null) {
                 selectedTtsEngine = defaultId
                 preferences.saveSelectedTtsId(defaultId)
             }
@@ -339,9 +347,11 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     companion object {
-        val Factory: androidx.lifecycle.ViewModelProvider.Factory = androidx.lifecycle.viewmodel.initializer {
-            val application = (this[androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY] as Application)
-            BookViewModel(application)
+        val Factory: ViewModelProvider.Factory = viewModelFactory {
+            initializer {
+                val application = (this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY] as Application)
+                BookViewModel(application)
+            }
         }
     }
 }

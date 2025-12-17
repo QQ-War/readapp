@@ -8,9 +8,8 @@ import retrofit2.Response
 
 class ReadRepository(private val apiFactory: (String) -> ReadApiService) {
 
-    suspend fun login(baseUrl: String, publicUrl: String?, username: String, password: String) =
-        executeWithFailover<BookLoginResult> {
-            val api = it
+    suspend fun login(baseUrl: String, publicUrl: String?, username: String, password: String): Result<BookLoginResult> =
+        executeWithFailover<BookLoginResult> { api ->
             api.login(username, password)
         }(buildEndpoints(baseUrl, publicUrl))
 
@@ -68,28 +67,28 @@ class ReadRepository(private val apiFactory: (String) -> ReadApiService) {
 
     private fun ensureTrailingSlash(url: String): String = if (url.endsWith('/')) url else "$url/"
 
-    private fun <T> executeWithFailover(block: suspend (ReadApiService) -> Response<com.readapp.data.model.ApiResponse<T>>) =
-        { endpoints: List<String> ->
-            var lastError: Throwable? = null
-            for (endpoint in endpoints) {
-                val api = apiFactory(endpoint)
-                try {
-                    val response = block(api)
-                    if (response.isSuccessful) {
-                        val body = response.body()
-                        if (body != null && body.isSuccess && body.data != null) {
-                            return Result.success(body.data)
-                        }
-                        lastError = IllegalStateException(body?.errorMsg ?: "未知错误")
-                    } else {
-                        lastError = IllegalStateException("服务器返回状态码 ${response.code()}")
+    private fun <T> executeWithFailover(block: suspend (ReadApiService) -> Response<com.readapp.data.model.ApiResponse<T>>):
+        suspend (List<String>) -> Result<T> = lambda@ { endpoints: List<String> ->
+        var lastError: Throwable? = null
+        for (endpoint in endpoints) {
+            val api = apiFactory(endpoint)
+            try {
+                val response = block(api)
+                if (response.isSuccessful) {
+                    val body = response.body()
+                    if (body != null && body.isSuccess && body.data != null) {
+                        return@lambda Result.success(body.data)
                     }
-                } catch (e: Exception) {
-                    lastError = e
+                    lastError = IllegalStateException(body?.errorMsg ?: "未知错误")
+                } else {
+                    lastError = IllegalStateException("服务器返回状态码 ${response.code()}")
                 }
+            } catch (e: Exception) {
+                lastError = e
             }
-            Result.failure(lastError ?: IllegalStateException("未知错误"))
         }
+        Result.failure(lastError ?: IllegalStateException("未知错误"))
+    }
 }
 
 private typealias BookLoginResult = com.readapp.data.model.LoginResponse

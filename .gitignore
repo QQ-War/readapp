@@ -38,3 +38,8 @@ fastlane/test_output
 # macOS
 .DS_Store
 
+# Android / Gradle
+.gradle/
+androidApp/.gradle/
+androidapp2/.gradle/
+
