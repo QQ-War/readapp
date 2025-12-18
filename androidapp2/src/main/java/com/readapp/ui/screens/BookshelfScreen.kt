@@ -1,4 +1,4 @@
-// BookshelfScreen.kt - 书架页面
+// BookshelfScreen.kt - 书架页面（带右上角设置按钮）
 package com.readapp.ui.screens
 
 import androidx.compose.foundation.background
@@ -19,11 +19,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.readapp.data.model.Book
 import com.readapp.ui.theme.AppDimens
 import com.readapp.ui.theme.customColors
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BookshelfScreen(
     books: List<Book>,
@@ -34,54 +34,102 @@ fun BookshelfScreen(
 ) {
     var searchQuery by remember { mutableStateOf("") }
     
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(AppDimens.PaddingMedium)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "书架",
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onSurface
+    Scaffold(
+        topBar = {
+            // 顶部栏：标题和设置按钮
+            TopAppBar(
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.VolumeUp,
+                            contentDescription = null,
+                            tint = MaterialTheme.customColors.gradientStart,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Text(
+                            text = "ReadApp",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                },
+                actions = {
+                    // 设置按钮
+                    IconButton(onClick = onSettingsClick) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "设置",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                )
             )
-
-            IconButton(onClick = onSettingsClick) {
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = "设置"
-                )
-            }
         }
-
-        Spacer(modifier = Modifier.height(AppDimens.PaddingMedium))
-        // 搜索栏
-        SearchBar(
-            query = searchQuery,
-            onQueryChange = { 
-                searchQuery = it
-                onSearchQueryChange(it)
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
-        
-        Spacer(modifier = Modifier.height(AppDimens.PaddingMedium))
-        
-        // 书籍网格
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            horizontalArrangement = Arrangement.spacedBy(AppDimens.PaddingMedium),
-            verticalArrangement = Arrangement.spacedBy(AppDimens.PaddingMedium)
+    ) { paddingValues ->
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(horizontal = AppDimens.PaddingMedium)
         ) {
-            items(books) { book ->
-                BookCard(
-                    book = book,
-                    onClick = { onBookClick(book) }
-                )
+            Spacer(modifier = Modifier.height(AppDimens.PaddingMedium))
+            
+            // 搜索栏
+            SearchBar(
+                query = searchQuery,
+                onQueryChange = { 
+                    searchQuery = it
+                    onSearchQueryChange(it)
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+            
+            Spacer(modifier = Modifier.height(AppDimens.PaddingMedium))
+            
+            // 书籍网格
+            if (books.isEmpty()) {
+                // 空状态
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Book,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            tint = MaterialTheme.customColors.textSecondary
+                        )
+                        Text(
+                            text = "暂无书籍",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.customColors.textSecondary
+                        )
+                    }
+                }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    horizontalArrangement = Arrangement.spacedBy(AppDimens.PaddingMedium),
+                    verticalArrangement = Arrangement.spacedBy(AppDimens.PaddingMedium),
+                    contentPadding = PaddingValues(bottom = AppDimens.PaddingLarge)
+                ) {
+                    items(books) { book ->
+                        BookCard(
+                            book = book,
+                            onClick = { onBookClick(book) }
+                        )
+                    }
+                }
             }
         }
     }
@@ -226,7 +274,7 @@ private fun ReadingProgress(
                 color = MaterialTheme.customColors.textSecondary
             )
             Text(
-                text = "$currentChapter/${totalChapters}章",
+                text = "$currentChapter/$totalChapters章",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.customColors.textSecondary
             )
