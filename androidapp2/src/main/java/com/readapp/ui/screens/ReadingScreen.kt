@@ -1,4 +1,4 @@
-// ReadingScreen.kt - 阅读页面（点击中间显示操作按钮）
+// ReadingScreen.kt - 阅读页面集成听书功能（段落高亮）
 package com.readapp.ui.screens
 
 import androidx.compose.animation.*
@@ -18,13 +18,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.readapp.data.model.Book
 import com.readapp.data.model.Chapter
 import com.readapp.ui.theme.AppDimens
 import com.readapp.ui.theme.customColors
+import kotlinx.coroutines.launch
 
 @Composable
 fun ReadingScreen(
@@ -33,13 +34,52 @@ fun ReadingScreen(
     currentChapterIndex: Int,
     currentChapterContent: String,
     onChapterClick: (Int) -> Unit,
-    onStartListening: () -> Unit,
+    onLoadChapterContent: (Int) -> Unit,
     onNavigateBack: () -> Unit,
+    // TTS 相关状态
+    isPlaying: Boolean = false,
+    currentPlayingParagraph: Int = -1,  // 当前播放的段落索引
+    preloadedParagraphs: Set<Int> = emptySet(),  // 已预载的段落索引
+    onPlayPauseClick: () -> Unit = {},
+    onStartListening: () -> Unit = {},
+    onStopListening: () -> Unit = {},
+    onPreviousParagraph: () -> Unit = {},
+    onNextParagraph: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showControls by remember { mutableStateOf(false) }
     var showChapterList by remember { mutableStateOf(false) }
     val scrollState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+    
+    // 分割段落
+    val paragraphs = remember(currentChapterContent) {
+        if (currentChapterContent.isNotEmpty()) {
+            currentChapterContent
+                .split("\n")
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+        } else {
+            emptyList()
+        }
+    }
+    
+    // 当章节索引变化时，加载章节内容
+    LaunchedEffect(currentChapterIndex) {
+        if (currentChapterIndex >= 0 && currentChapterIndex < chapters.size) {
+            onLoadChapterContent(currentChapterIndex)
+        }
+    }
+    
+    // 当前播放段落变化时，自动滚动到该段落
+    LaunchedEffect(currentPlayingParagraph) {
+        if (currentPlayingParagraph >= 0 && currentPlayingParagraph < paragraphs.size) {
+            coroutineScope.launch {
+                // +1 是因为第一个 item 是章节标题
+                scrollState.animateScrollToItem(currentPlayingParagraph + 1)
+            }
+        }
+    }
     
     Box(
         modifier = modifier.fillMaxSize()
@@ -57,59 +97,61 @@ fun ReadingScreen(
                 }
         ) {
             // 内容区域
-            LazyColumn(
-                state = scrollState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .weight(1f),
-                contentPadding = PaddingValues(
-                    start = AppDimens.PaddingLarge,
-                    end = AppDimens.PaddingLarge,
-                    top = if (showControls) 80.dp else AppDimens.PaddingLarge,
-                    bottom = if (showControls) 100.dp else AppDimens.PaddingLarge
-                )
-            ) {
-                // 章节标题
-                item {
-                    Text(
-                        text = if (currentChapterIndex < chapters.size) {
-                            chapters[currentChapterIndex].title
-                        } else {
-                            "加载中..."
-                        },
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(bottom = AppDimens.PaddingLarge)
-                    )
-                }
-                
-                // 章节内容（分段显示）
-                if (currentChapterContent.isNotEmpty()) {
-                    val paragraphs = currentChapterContent
-                        .split("\n")
-                        .filter { it.isNotBlank() }
-                    
-                    itemsIndexed(paragraphs) { index, paragraph ->
+            if (currentChapterContent.isEmpty()) {
+                // 加载中状态
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        CircularProgressIndicator()
                         Text(
-                            text = paragraph.trim(),
+                            text = "加载中...",
                             style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.customColors.textSecondary
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    state = scrollState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .weight(1f),
+                    contentPadding = PaddingValues(
+                        start = AppDimens.PaddingLarge,
+                        end = AppDimens.PaddingLarge,
+                        top = if (showControls) 80.dp else AppDimens.PaddingLarge,
+                        bottom = if (showControls) 120.dp else AppDimens.PaddingLarge
+                    )
+                ) {
+                    // 章节标题
+                    item {
+                        Text(
+                            text = if (currentChapterIndex < chapters.size) {
+                                chapters[currentChapterIndex].title
+                            } else {
+                                "章节"
+                            },
+                            style = MaterialTheme.typography.headlineSmall,
                             color = MaterialTheme.colorScheme.onSurface,
-                            lineHeight = MaterialTheme.typography.bodyLarge.lineHeight * 1.8f,
+                            modifier = Modifier.padding(bottom = AppDimens.PaddingLarge)
+                        )
+                    }
+                    
+                    // 章节内容（分段显示，带高亮）
+                    itemsIndexed(paragraphs) { index, paragraph ->
+                        ParagraphItem(
+                            text = paragraph,
+                            isPlaying = index == currentPlayingParagraph,
+                            isPreloaded = preloadedParagraphs.contains(index),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(bottom = AppDimens.PaddingMedium)
                         )
-                    }
-                } else {
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(200.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator()
-                        }
                     }
                 }
             }
@@ -141,6 +183,7 @@ fun ReadingScreen(
             modifier = Modifier.align(Alignment.BottomCenter)
         ) {
             BottomControlBar(
+                isPlaying = isPlaying,
                 onPreviousChapter = {
                     if (currentChapterIndex > 0) {
                         onChapterClick(currentChapterIndex - 1)
@@ -154,9 +197,25 @@ fun ReadingScreen(
                 onShowChapterList = {
                     showChapterList = true
                 },
-                onStartListening = onStartListening,
+                onPlayPause = {
+                    if (isPlaying) {
+                        onPlayPauseClick()
+                    } else {
+                        if (currentPlayingParagraph < 0) {
+                            // 第一次点击，开始听书
+                            onStartListening()
+                        } else {
+                            // 继续播放
+                            onPlayPauseClick()
+                        }
+                    }
+                },
+                onStopListening = onStopListening,
+                onPreviousParagraph = onPreviousParagraph,
+                onNextParagraph = onNextParagraph,
                 canGoPrevious = currentChapterIndex > 0,
-                canGoNext = currentChapterIndex < chapters.size - 1
+                canGoNext = currentChapterIndex < chapters.size - 1,
+                showTtsControls = currentPlayingParagraph >= 0  // 开始播放后显示TTS控制
             )
         }
         
@@ -172,6 +231,40 @@ fun ReadingScreen(
                 onDismiss = { showChapterList = false }
             )
         }
+    }
+}
+
+/**
+ * 段落项组件 - 带高亮效果
+ */
+@Composable
+private fun ParagraphItem(
+    text: String,
+    isPlaying: Boolean,
+    isPreloaded: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val backgroundColor = when {
+        isPlaying -> MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)  // 当前播放：深蓝色高亮
+        isPreloaded -> MaterialTheme.customColors.success.copy(alpha = 0.15f)  // 已预载：浅绿色标记
+        else -> Color.Transparent
+    }
+    
+    Surface(
+        modifier = modifier,
+        color = backgroundColor,
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            lineHeight = MaterialTheme.typography.bodyLarge.lineHeight * 1.8f,
+            modifier = Modifier.padding(
+                horizontal = if (isPlaying || isPreloaded) 12.dp else 0.dp,
+                vertical = if (isPlaying || isPreloaded) 8.dp else 0.dp
+            )
+        )
     }
 }
 
@@ -226,70 +319,136 @@ private fun TopControlBar(
 
 @Composable
 private fun BottomControlBar(
+    isPlaying: Boolean,
     onPreviousChapter: () -> Unit,
     onNextChapter: () -> Unit,
     onShowChapterList: () -> Unit,
-    onStartListening: () -> Unit,
+    onPlayPause: () -> Unit,
+    onStopListening: () -> Unit,
+    onPreviousParagraph: () -> Unit,
+    onNextParagraph: () -> Unit,
     canGoPrevious: Boolean,
-    canGoNext: Boolean
+    canGoNext: Boolean,
+    showTtsControls: Boolean
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
         shadowElevation = 8.dp
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(AppDimens.PaddingLarge),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(AppDimens.PaddingMedium)
         ) {
-            // 上一章
-            ControlButton(
-                icon = Icons.Default.SkipPrevious,
-                label = "上一章",
-                onClick = onPreviousChapter,
-                enabled = canGoPrevious
-            )
-            
-            // 目录
-            ControlButton(
-                icon = Icons.Default.List,
-                label = "目录",
-                onClick = onShowChapterList
-            )
-            
-            // 听书（主按钮）
-            FloatingActionButton(
-                onClick = onStartListening,
-                containerColor = MaterialTheme.customColors.gradientStart,
-                elevation = FloatingActionButtonDefaults.elevation(
-                    defaultElevation = 6.dp
-                )
-            ) {
-                Icon(
-                    imageVector = Icons.Default.VolumeUp,
-                    contentDescription = "听书",
-                    tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(28.dp)
-                )
+            // TTS 段落控制（播放时显示）
+            if (showTtsControls) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 上一段
+                    IconButton(onClick = onPreviousParagraph) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowUp,
+                            contentDescription = "上一段",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    
+                    // 播放/暂停
+                    FloatingActionButton(
+                        onClick = onPlayPause,
+                        containerColor = MaterialTheme.customColors.gradientStart,
+                        modifier = Modifier.size(56.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = if (isPlaying) "暂停" else "播放",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                    
+                    // 下一段
+                    IconButton(onClick = onNextParagraph) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowDown,
+                            contentDescription = "下一段",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    
+                    // 停止听书
+                    IconButton(onClick = onStopListening) {
+                        Icon(
+                            imageVector = Icons.Default.Stop,
+                            contentDescription = "停止",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                Divider(color = MaterialTheme.customColors.border)
+                Spacer(modifier = Modifier.height(8.dp))
             }
             
-            // 下一章
-            ControlButton(
-                icon = Icons.Default.SkipNext,
-                label = "下一章",
-                onClick = onNextChapter,
-                enabled = canGoNext
-            )
-            
-            // 字体大小（TODO）
-            ControlButton(
-                icon = Icons.Default.FormatSize,
-                label = "字体",
-                onClick = { /* TODO */ }
-            )
+            // 基础阅读控制
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // 上一章
+                ControlButton(
+                    icon = Icons.Default.SkipPrevious,
+                    label = "上一章",
+                    onClick = onPreviousChapter,
+                    enabled = canGoPrevious
+                )
+                
+                // 目录
+                ControlButton(
+                    icon = Icons.Default.List,
+                    label = "目录",
+                    onClick = onShowChapterList
+                )
+                
+                // 听书按钮（未播放时显示）
+                if (!showTtsControls) {
+                    FloatingActionButton(
+                        onClick = onPlayPause,
+                        containerColor = MaterialTheme.customColors.gradientStart,
+                        elevation = FloatingActionButtonDefaults.elevation(
+                            defaultElevation = 6.dp
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.VolumeUp,
+                            contentDescription = "听书",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                }
+                
+                // 下一章
+                ControlButton(
+                    icon = Icons.Default.SkipNext,
+                    label = "下一章",
+                    onClick = onNextChapter,
+                    enabled = canGoNext
+                )
+                
+                // 字体大小（TODO）
+                ControlButton(
+                    icon = Icons.Default.FormatSize,
+                    label = "字体",
+                    onClick = { /* TODO */ }
+                )
+            }
         }
     }
 }
@@ -382,11 +541,13 @@ private fun ChapterListDialog(
                                     }
                                 )
                                 
-                                Text(
-                                    text = "时长: ${chapter.duration}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.customColors.textSecondary
-                                )
+                                if (chapter.duration.isNotEmpty()) {
+                                    Text(
+                                        text = "时长: ${chapter.duration}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.customColors.textSecondary
+                                    )
+                                }
                             }
                             
                             if (isCurrentChapter) {
