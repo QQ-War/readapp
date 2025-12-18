@@ -1,4 +1,4 @@
-// SettingsScreen.kt - 设置页面
+// SettingsScreen.kt - 设置页面（带返回按钮）
 package com.readapp.ui.screens
 
 import androidx.compose.foundation.clickable
@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import com.readapp.ui.theme.AppDimens
 import com.readapp.ui.theme.customColors
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     serverAddress: String,
@@ -28,140 +29,149 @@ fun SettingsScreen(
     onPreloadCountChange: (Int) -> Unit,
     onClearCache: () -> Unit,
     onLogout: () -> Unit,
+    onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var serverInput by remember(serverAddress) { mutableStateOf(serverAddress) }
-
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(AppDimens.PaddingMedium),
-        verticalArrangement = Arrangement.spacedBy(AppDimens.PaddingMedium)
-    ) {
-        // 标题
-        Text(
-            text = "设置",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(vertical = AppDimens.PaddingSmall)
-        )
-        
-        // 服务器设置
-        SettingsSection(title = "服务器配置") {
-            OutlinedTextField(
-                value = serverInput,
-                onValueChange = {
-                    serverInput = it
-                    onServerAddressChange(it)
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "设置",
+                        style = MaterialTheme.typography.headlineSmall
+                    )
                 },
-                label = { Text("服务器地址") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(AppDimens.PaddingMedium),
-                leadingIcon = { Icon(imageVector = Icons.Default.Settings, contentDescription = null) },
-                singleLine = true
-            )
-        }
-        
-        // TTS 设置
-        SettingsSection(title = "听书设置") {
-            SettingsItem(
-                icon = Icons.Default.VolumeUp,
-                title = "TTS引擎",
-                subtitle = selectedTtsEngine,
-                onClick = onTtsEngineClick
-            )
-            
-            Divider(color = MaterialTheme.customColors.border)
-            
-            SliderSettingItem(
-                icon = Icons.Default.Speed,
-                title = "语速",
-                value = speechSpeed,
-                valueRange = 5f..50f,
-                onValueChange = { onSpeechSpeedChange(it.toInt()) },
-                valueLabel = speechSpeed.toString()
-            )
-            
-            Divider(color = MaterialTheme.customColors.border)
-            
-            SliderSettingItem(
-                icon = Icons.Default.CloudQueue,
-                title = "预加载数量",
-                value = preloadCount,
-                valueRange = 1f..10f,
-                onValueChange = { onPreloadCountChange(it.toInt()) },
-                valueLabel = preloadCount.toString()
-            )
-        }
-        
-        // 数据管理
-        SettingsSection(title = "数据管理") {
-            SettingsItem(
-                icon = Icons.Default.Delete,
-                title = "清除本地缓存",
-                subtitle = "清除已缓存的书籍内容",
-                onClick = onClearCache,
-                tint = MaterialTheme.colorScheme.onSurface
-            )
-        }
-        
-        // 关于
-        SettingsSection(title = "关于") {
-            SettingsItem(
-                icon = Icons.Default.Info,
-                title = "应用版本",
-                subtitle = "v1.0.0",
-                onClick = { }
-            )
-            
-            Divider(color = MaterialTheme.customColors.border)
-            
-            SettingsItem(
-                icon = Icons.Default.Description,
-                title = "开源协议",
-                subtitle = "MIT License",
-                onClick = { }
-            )
-        }
-        
-        // 退出登录
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(AppDimens.CornerRadiusLarge),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.customColors.cardBackground
-            ),
-            elevation = CardDefaults.cardElevation(
-                defaultElevation = AppDimens.ElevationSmall
-            )
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onLogout)
-                    .padding(AppDimens.PaddingMedium),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Logout,
-                    contentDescription = "退出登录",
-                    tint = MaterialTheme.colorScheme.error
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "返回"
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface
                 )
-                
-                Spacer(modifier = Modifier.width(8.dp))
-                
-                Text(
-                    text = "退出登录",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.error
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .verticalScroll(rememberScrollState())
+                .padding(AppDimens.PaddingMedium),
+            verticalArrangement = Arrangement.spacedBy(AppDimens.PaddingMedium)
+        ) {
+            // 服务器设置
+            SettingsSection(title = "服务器配置") {
+                SettingsItem(
+                    icon = Icons.Default.Cloud,
+                    title = "服务器地址",
+                    subtitle = serverAddress,
+                    onClick = { /* 打开服务器地址编辑对话框 */ }
                 )
             }
+            
+            // TTS 设置
+            SettingsSection(title = "听书设置") {
+                SettingsItem(
+                    icon = Icons.Default.VolumeUp,
+                    title = "TTS引擎",
+                    subtitle = selectedTtsEngine,
+                    onClick = onTtsEngineClick
+                )
+                
+                Divider(color = MaterialTheme.customColors.border)
+                
+                SliderSettingItem(
+                    icon = Icons.Default.Speed,
+                    title = "语速",
+                    value = speechSpeed,
+                    valueRange = 5f..50f,
+                    onValueChange = { onSpeechSpeedChange(it.toInt()) },
+                    valueLabel = speechSpeed.toString()
+                )
+                
+                Divider(color = MaterialTheme.customColors.border)
+                
+                SliderSettingItem(
+                    icon = Icons.Default.CloudQueue,
+                    title = "预加载数量",
+                    value = preloadCount,
+                    valueRange = 1f..10f,
+                    onValueChange = { onPreloadCountChange(it.toInt()) },
+                    valueLabel = preloadCount.toString()
+                )
+            }
+            
+            // 数据管理
+            SettingsSection(title = "数据管理") {
+                SettingsItem(
+                    icon = Icons.Default.Delete,
+                    title = "清除本地缓存",
+                    subtitle = "清除已缓存的书籍内容",
+                    onClick = onClearCache,
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            
+            // 关于
+            SettingsSection(title = "关于") {
+                SettingsItem(
+                    icon = Icons.Default.Info,
+                    title = "应用版本",
+                    subtitle = "v1.0.0",
+                    onClick = { }
+                )
+                
+                Divider(color = MaterialTheme.customColors.border)
+                
+                SettingsItem(
+                    icon = Icons.Default.Description,
+                    title = "开源协议",
+                    subtitle = "MIT License",
+                    onClick = { }
+                )
+            }
+            
+            // 退出登录
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(AppDimens.CornerRadiusLarge),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.customColors.cardBackground
+                ),
+                elevation = CardDefaults.cardElevation(
+                    defaultElevation = AppDimens.ElevationSmall
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onLogout)
+                        .padding(AppDimens.PaddingMedium),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Logout,
+                        contentDescription = "退出登录",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    Text(
+                        text = "退出登录",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(32.dp))
         }
-        
-        Spacer(modifier = Modifier.height(32.dp))
     }
 }
 
@@ -317,63 +327,4 @@ private fun SliderSettingItem(
             )
         )
     }
-}
-
-// TTS 引擎选择对话框
-@Composable
-fun TtsEngineSelectionDialog(
-    engines: List<String>,
-    selectedEngine: String,
-    onEngineSelected: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = "选择 TTS 引擎",
-                style = MaterialTheme.typography.titleLarge
-            )
-        },
-        text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                engines.forEach { engine ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                onEngineSelected(engine)
-                                onDismiss()
-                            }
-                            .padding(vertical = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = engine,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        
-                        if (engine == selectedEngine) {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = "已选择",
-                                tint = MaterialTheme.customColors.gradientStart
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消")
-            }
-        },
-        shape = RoundedCornerShape(AppDimens.CornerRadiusLarge)
-    )
 }
