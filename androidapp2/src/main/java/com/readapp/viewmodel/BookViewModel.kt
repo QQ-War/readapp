@@ -62,6 +62,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     // ==================== 书籍相关状态 ====================
 
     private var allBooks: List<Book> = emptyList()
+    private val chapterContentCache = mutableMapOf<Int, String>()
 
     private val _books = MutableStateFlow<List<Book>>(emptyList())
     val books: StateFlow<List<Book>> = _books.asStateFlow()
@@ -224,6 +225,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             _currentChapterContent.value = ""
             _currentParagraphIndex.value = -1
             currentParagraphs = emptyList()
+            chapterContentCache.clear()
             stopPlayback()
             _availableTtsEngines.value = emptyList()
             _selectedTtsEngine.value = ""
@@ -283,6 +285,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         _currentChapterContent.value = ""
         _currentParagraphIndex.value = -1
         currentParagraphs = emptyList()
+        chapterContentCache.clear()
         resetPlayback()
 
         viewModelScope.launch {
@@ -296,9 +299,15 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         if (index !in _chapters.value.indices) return
 
         _currentChapterIndex.value = index
-        _currentChapterContent.value = ""
+        val cachedContent = chapterContentCache[index]
+        _currentChapterContent.value = cachedContent.orEmpty()
+        currentParagraphs = cachedContent
+            ?.split("\n")
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            ?: emptyList()
+        _totalParagraphs.value = currentParagraphs.size.coerceAtLeast(1)
         _currentParagraphIndex.value = -1
-        currentParagraphs = emptyList()
         resetPlayback()
 
         viewModelScope.launch {
@@ -363,9 +372,14 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
 
         // 检查缓存
         val cached = _chapters.value.getOrNull(index)?.content
+        val cachedInMemory = chapterContentCache[index]
         if (!cached.isNullOrBlank()) {
             updateChapterContent(index, cached)
             return cached
+        }
+        if (!cachedInMemory.isNullOrBlank()) {
+            updateChapterContent(index, cachedInMemory)
+            return cachedInMemory
         }
 
         // 从服务器加载
@@ -406,6 +420,9 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             resolvedContent.ifBlank { null }
         } finally {
             _isContentLoading.value = false
+            if (_currentChapterContent.value.isBlank() && !cachedInMemory.isNullOrBlank()) {
+                updateChapterContent(index, cachedInMemory)
+            }
         }
     }
 
@@ -417,6 +434,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
 
         // 更新当前章节内容
         _currentChapterContent.value = content
+        chapterContentCache[index] = content
 
         // 分割段落
         currentParagraphs = content
