@@ -301,11 +301,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         _currentChapterIndex.value = index
         val cachedContent = chapterContentCache[index]
         _currentChapterContent.value = cachedContent.orEmpty()
-        currentParagraphs = cachedContent
-            ?.split("\n")
-            ?.map { it.trim() }
-            ?.filter { it.isNotEmpty() }
-            ?: emptyList()
+        currentParagraphs = cachedContent?.let { parseParagraphs(it) } ?: emptyList()
         _totalParagraphs.value = currentParagraphs.size.coerceAtLeast(1)
         _currentParagraphIndex.value = -1
         resetPlayback()
@@ -454,14 +450,15 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         chapterContentCache[index] = content
 
         // 分割段落
-        currentParagraphs = content
-            .split("\n")
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
+        currentParagraphs = parseParagraphs(content)
 
         _totalParagraphs.value = currentParagraphs.size.coerceAtLeast(1)
 
         Log.d(TAG, "章节内容加载成功: ${currentParagraphs.size} 个段落")
+    }
+
+    private fun parseParagraphs(content: String): List<String> {
+        return content.split("\n").map { it.trim() }.filter { it.isNotBlank() }
     }
 
     private fun cleanChapterContent(raw: String): String {
