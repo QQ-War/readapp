@@ -309,6 +309,8 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     fun setCurrentChapter(index: Int) {
         if (index !in _chapters.value.indices) return
 
+        val chapterTitle = _chapters.value.getOrNull(index)?.title.orEmpty()
+        appendLog("切换章节: index=$index title=$chapterTitle")
         _currentChapterIndex.value = index
         val cachedContent = chapterContentCache[index]
         _currentChapterContent.value = cachedContent.orEmpty()
@@ -344,7 +346,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         val bookUrl = book.bookUrl ?: return
 
         _isContentLoading.value = true
-        appendLog("加载章节列表: bookUrl=$bookUrl")
+        appendLog("加载章节列表: bookUrl=$bookUrl source=${book.origin.orEmpty()}")
         val chaptersResult = runCatching {
             repository.fetchChapterList(
                 currentServerEndpoint(),
@@ -384,6 +386,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
 
     fun loadChapterContent(index: Int) {
         viewModelScope.launch {
+            appendLog("触发加载章节内容: index=$index")
             loadChapterContentInternal(index)
         }
     }
@@ -393,11 +396,15 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun loadChapterContentInternal(index: Int): String? {
+        appendLog("进入loadChapterContentInternal: index=$index")
         val book = _selectedBook.value ?: return null
         val chapter = _chapters.value.getOrNull(index) ?: return null
         val bookUrl = book.bookUrl ?: return null
 
-        if (_isContentLoading.value) return _currentChapterContent.value.ifBlank { null }
+        if (_isContentLoading.value) {
+            appendLog("章节内容加载中，跳过请求: index=$index")
+            return _currentChapterContent.value.ifBlank { null }
+        }
 
         // 优先使用缓存内容
         val cached = chapter.content
@@ -414,8 +421,12 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         _isContentLoading.value = true
+        appendLog("开始请求章节内容: index=$index")
         _currentChapterContent.value = ""
         appendLog("开始加载章节内容: index=$index url=${chapter.url}")
+        appendLog(
+            "请求章节内容: bookUrl=$bookUrl source=${book.origin.orEmpty()} index=$index chapterUrl=${chapter.url}"
+        )
         Log.d(TAG, "开始加载章节内容: 第${index + 1}章")
 
         return try {
@@ -429,14 +440,16 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             )
 
             result.onSuccess { content ->
-                appendLog("章节内容原文: index=$index content=${content.orEmpty()}")
+                appendLog("章节内容原文: index=$index length=${content.orEmpty().length}")
+                appendLog("章节内容原文内容: index=$index content=${content.orEmpty()}")
                 val cleaned = cleanChapterContent(content.orEmpty())
                 val resolved = when {
                     cleaned.isNotBlank() -> cleaned
                     content.orEmpty().isNotBlank() -> content.orEmpty().trim()
                     else -> "章节内容为空"
                 }
-                appendLog("章节内容清洗后: index=$index content=$resolved")
+                appendLog("章节内容清洗后: index=$index length=${resolved.length}")
+                appendLog("章节内容清洗后内容: index=$index content=$resolved")
                 appendLog("章节内容加载成功: index=$index length=${resolved.length}")
                 updateChapterContent(index, resolved)
             }.onFailure { error ->
