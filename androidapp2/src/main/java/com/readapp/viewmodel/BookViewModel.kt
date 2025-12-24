@@ -411,7 +411,8 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
                 _publicServerAddress.value.ifBlank { null },
                 _accessToken.value,
                 bookUrl,
-                chapter.url
+                book.origin,
+                chapter.index
             )
 
             result.onSuccess { content ->
