@@ -27,9 +27,12 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.stateIn
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
@@ -119,11 +122,17 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _preloadedParagraphs = MutableStateFlow<Set<Int>>(emptySet())
     val preloadedParagraphs: StateFlow<Set<Int>> = _preloadedParagraphs.asStateFlow()
+    private val _preloadedChapters = MutableStateFlow<Set<Int>>(emptySet())
+    val preloadedChapters: StateFlow<Set<Int>> = _preloadedChapters.asStateFlow()
 
     // ==================== TTS 播放状态 ====================
 
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
+    private val _keepPlaying = MutableStateFlow(false)
+    val isPlayingUi: StateFlow<Boolean> = combine(_isPlaying, _keepPlaying) { playing, keep ->
+        playing || keep
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private val _currentTime = MutableStateFlow("00:00")
     val currentTime: StateFlow<String> = _currentTime.asStateFlow()
@@ -351,6 +360,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
 
         val chapterTitle = _chapters.value.getOrNull(index)?.title.orEmpty()
         appendLog("切换章节: index=$index title=$chapterTitle")
+        _keepPlaying.value = _isPlaying.value || _keepPlaying.value
         _currentChapterIndex.value = index
         val cachedContent = chapterContentCache[index]
         _currentChapterContent.value = cachedContent.orEmpty()
@@ -535,6 +545,11 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         _totalParagraphs.value = currentParagraphs.size.coerceAtLeast(1)
 
         Log.d(TAG, "章节内容加载成功: ${currentParagraphs.size} 个段落")
+
+        if (_keepPlaying.value && !_isPlaying.value) {
+            _currentParagraphIndex.value = 0
+            startPlayback()
+        }
     }
 
     private fun parseParagraphs(content: String): List<String> {
@@ -586,6 +601,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             currentSentences = splitTextIntoSentences(content)
             currentParagraphs = currentSentences
             _totalParagraphs.value = currentSentences.size.coerceAtLeast(1)
+            _keepPlaying.value = true
 
             ReadAudioService.startService(appContext)
 
@@ -602,11 +618,13 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun pausePlayback() {
         player.playWhenReady = false
+        _keepPlaying.value = false
     }
 
     private fun stopPlayback() {
         player.stop()
         _isPlaying.value = false
+        _keepPlaying.value = false
         _currentParagraphIndex.value = -1
         _preloadedParagraphs.value = emptySet()
         isReadingChapterTitle = false
@@ -983,28 +1001,30 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun startPreloading(currentIndex: Int, count: Int) {
         if (preloadingJobActive) return
         preloadingJobActive = true
-        val endIndex = min(currentIndex + count, currentParagraphs.size - 1)
-        val indices = if (currentIndex < endIndex) (currentIndex + 1..endIndex).toList() else emptyList()
-        if (indices.isEmpty()) {
-            preloadingJobActive = false
-            return
-        }
+        try {
+            val endIndex = min(currentIndex + count, currentParagraphs.size - 1)
+            val indices = if (currentIndex < endIndex) (currentIndex + 1..endIndex).toList() else emptyList()
+            if (indices.isEmpty()) {
+                return
+            }
 
-        val preloaded = _preloadedParagraphs.value.toMutableSet()
-        for (index in indices) {
-            val sentence = currentParagraphs.getOrNull(index) ?: continue
-            if (isPunctuationOnly(sentence)) continue
-            if (getCachedAudio(_currentChapterIndex.value, index) != null) {
-                preloaded.add(index)
-                continue
+            val preloaded = _preloadedParagraphs.value.toMutableSet()
+            for (index in indices) {
+                val sentence = currentParagraphs.getOrNull(index) ?: continue
+                if (isPunctuationOnly(sentence)) continue
+                if (getCachedAudio(_currentChapterIndex.value, index) != null) {
+                    preloaded.add(index)
+                    continue
+                }
+                val success = downloadAndCacheAudio(_currentChapterIndex.value, index, sentence)
+                if (success) {
+                    preloaded.add(index)
+                }
             }
-            val success = downloadAndCacheAudio(_currentChapterIndex.value, index, sentence)
-            if (success) {
-                preloaded.add(index)
-            }
+            _preloadedParagraphs.value = preloaded
+        } finally {
+            preloadingJobActive = false
         }
-        _preloadedParagraphs.value = preloaded
-        preloadingJobActive = false
     }
 
     private suspend fun downloadAndCacheAudio(
@@ -1051,6 +1071,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         result.onSuccess { content ->
             viewModelScope.launch {
                 nextChapterSentences = splitTextIntoSentences(content.orEmpty())
+                _preloadedChapters.value = _preloadedChapters.value + nextIndex
                 preloadNextChapterAudio(nextIndex)
             }
         }
@@ -1099,6 +1120,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             audioCacheLock.withLock {
                 nextChapterSentences = emptyList()
+                _preloadedChapters.value = emptySet()
             }
         }
     }

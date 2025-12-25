@@ -46,6 +46,7 @@ fun ReadingScreen(
     isPlaying: Boolean = false,
     currentPlayingParagraph: Int = -1,  // 当前播放的段落索引
     preloadedParagraphs: Set<Int> = emptySet(),  // 已预载的段落索引
+    preloadedChapters: Set<Int> = emptySet(),
     onPlayPauseClick: () -> Unit = {},
     onStartListening: () -> Unit = {},
     onStopListening: () -> Unit = {},
@@ -274,6 +275,7 @@ fun ReadingScreen(
             ChapterListDialog(
                 chapters = chapters,
                 currentChapterIndex = currentChapterIndex,
+                preloadedChapters = preloadedChapters,
                 onChapterClick = { index ->
                     onLogEvent("ReadingScreen: select chapter index=$index")
                     onChapterClick(index)
@@ -640,6 +642,7 @@ private fun ControlButton(
 private fun ChapterListDialog(
     chapters: List<Chapter>,
     currentChapterIndex: Int,
+    preloadedChapters: Set<Int>,
     onChapterClick: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -661,7 +664,9 @@ private fun ChapterListDialog(
                     Surface(
                         onClick = { onChapterClick(index) },
                         color = if (isCurrentChapter) {
-                            MaterialTheme.customColors.gradientStart.copy(alpha = 0.1f)
+                            MaterialTheme.customColors.gradientStart.copy(alpha = 0.25f)
+                        } else if (preloadedChapters.contains(index)) {
+                            MaterialTheme.customColors.success.copy(alpha = 0.12f)
                         } else {
                             MaterialTheme.colorScheme.surface
                         },

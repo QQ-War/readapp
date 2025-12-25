@@ -108,8 +108,10 @@ fun ReadAppMain() {
 
                 // TTS 状态
                 val isPlaying by bookViewModel.isPlaying.collectAsState()
+                val isPlayingUi by bookViewModel.isPlayingUi.collectAsState()
                 val currentPlayingParagraph by bookViewModel.currentParagraphIndex.collectAsState()
                 val preloadedParagraphs by bookViewModel.preloadedParagraphs.collectAsState()
+                val preloadedChapters by bookViewModel.preloadedChapters.collectAsState()
 
                 selectedBook?.let { book ->
                     ReadingScreen(
@@ -136,9 +138,10 @@ fun ReadAppMain() {
                             navController.popBackStack()
                         },
                         // TTS 相关
-                        isPlaying = isPlaying,
+                        isPlaying = isPlayingUi,
                         currentPlayingParagraph = currentPlayingParagraph,
                         preloadedParagraphs = preloadedParagraphs,
+                        preloadedChapters = preloadedChapters,
                         onPlayPauseClick = {
                             bookViewModel.togglePlayPause()
                         },
@@ -164,6 +167,7 @@ fun ReadAppMain() {
             // 设置页面
             composable(Screen.Settings.route) {
                 val serverAddress by bookViewModel.serverAddress.collectAsState()
+                val username by bookViewModel.username.collectAsState()
                 val selectedTtsEngine by bookViewModel.selectedTtsEngine.collectAsState()
                 val narrationTtsEngine by bookViewModel.narrationTtsEngine.collectAsState()
                 val dialogueTtsEngine by bookViewModel.dialogueTtsEngine.collectAsState()
@@ -175,6 +179,7 @@ fun ReadAppMain() {
 
                 SettingsScreen(
                     serverAddress = serverAddress,
+                    username = username,
                     selectedTtsEngine = selectedTtsEngine,
                     narrationTtsEngine = narrationTtsEngine,
                     dialogueTtsEngine = dialogueTtsEngine,

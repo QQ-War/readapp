@@ -24,6 +24,7 @@ import com.readapp.ui.theme.customColors
 @Composable
 fun SettingsScreen(
     serverAddress: String,
+    username: String,
     selectedTtsEngine: String,
     narrationTtsEngine: String,
     dialogueTtsEngine: String,
@@ -52,6 +53,7 @@ fun SettingsScreen(
     var showNarrationDialog by remember { mutableStateOf(false) }
     var showDialogueDialog by remember { mutableStateOf(false) }
     var showSpeakerDialog by remember { mutableStateOf(false) }
+    var showAccountDialog by remember { mutableStateOf(false) }
     var newSpeakerName by remember { mutableStateOf("") }
     var selectedSpeakerEngine by remember { mutableStateOf("") }
     val selectedTtsName = remember(selectedTtsEngine, availableTtsEngines) {
@@ -108,7 +110,7 @@ fun SettingsScreen(
                     icon = Icons.Default.Cloud,
                     title = "服务器地址",
                     subtitle = serverAddress,
-                    onClick = { /* 打开服务器地址编辑对话框 */ }
+                    onClick = { showAccountDialog = true }
                 )
             }
             
@@ -347,6 +349,18 @@ fun SettingsScreen(
                 },
                 onReload = onReloadTtsEngines,
                 onDismiss = { showTtsDialog = false }
+            )
+        }
+
+        if (showAccountDialog) {
+            AccountDetailDialog(
+                serverAddress = serverAddress,
+                username = username,
+                onLogout = {
+                    showAccountDialog = false
+                    onLogout()
+                },
+                onDismiss = { showAccountDialog = false }
             )
         }
 
@@ -596,6 +610,35 @@ private fun TtsEngineDialog(
             }
         },
         confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("关闭")
+            }
+        }
+    )
+}
+
+@Composable
+private fun AccountDetailDialog(
+    serverAddress: String,
+    username: String,
+    onLogout: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = "帐号详情") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(text = "账号：${username.ifBlank { "未登录" }}")
+                Text(text = "服务器：$serverAddress")
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onLogout) {
+                Text("退出登录")
+            }
+        },
+        dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("关闭")
             }

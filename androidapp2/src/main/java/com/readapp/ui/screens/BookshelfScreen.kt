@@ -18,9 +18,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.readapp.data.model.Book
 import com.readapp.ui.theme.AppDimens
 import com.readapp.ui.theme.customColors
@@ -192,6 +194,7 @@ private fun BookRow(
         ) {
             BookCover(
                 emoji = book.coverEmoji,
+                coverUrl = book.coverUrl,
                 modifier = Modifier
                     .fillMaxHeight()
                     .aspectRatio(3f / 4f)
@@ -233,6 +236,7 @@ private fun BookRow(
 @Composable
 private fun BookCover(
     emoji: String,
+    coverUrl: String?,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -248,11 +252,20 @@ private fun BookCover(
             ),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = emoji,
-            style = MaterialTheme.typography.displayLarge,
-            fontSize = 64.sp
-        )
+        if (!coverUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = coverUrl,
+                contentDescription = "书籍封面",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Text(
+                text = emoji,
+                style = MaterialTheme.typography.displayLarge,
+                fontSize = 64.sp
+            )
+        }
     }
 }
 
