@@ -52,6 +52,7 @@ fun ReadingScreen(
     onPreviousParagraph: () -> Unit = {},
     onNextParagraph: () -> Unit = {},
     onReadingFontSizeChange: (Float) -> Unit = {},
+    onExit: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showControls by remember { mutableStateOf(false) }
@@ -59,6 +60,7 @@ fun ReadingScreen(
     var showFontDialog by remember { mutableStateOf(false) }
     val scrollState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+    val latestOnExit by rememberUpdatedState(onExit)
     
     // 分割段落
     val displayContent = remember(currentChapterContent, currentChapterIndex, chapters) {
@@ -95,6 +97,12 @@ fun ReadingScreen(
                 // +1 是因为第一个 item 是章节标题
                 scrollState.animateScrollToItem(currentPlayingParagraph + 1)
             }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            latestOnExit()
         }
     }
     
