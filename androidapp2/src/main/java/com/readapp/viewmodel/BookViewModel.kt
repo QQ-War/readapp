@@ -432,7 +432,6 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
                 if (inlineContent.isNotBlank()) {
                     updateChapterContent(index, cleanChapterContent(inlineContent))
                 }
-                loadChapterContent(index)
             }
             _isContentLoading.value = false
         }.onFailure { error ->
