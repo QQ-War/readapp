@@ -954,7 +954,17 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         _preloadedParagraphs.value = emptySet()
         _preloadedChapters.value = queue.preloadedChapters.toSet()
 
-        player.setMediaItems(queue.mediaItems)
+    private fun playAudioData(data: ByteArray) {
+        val mediaItem = MediaItem.Builder().setUri("bytearray://tts").build()
+        val mediaSource = ProgressiveMediaSource.Factory(
+            object : DataSource.Factory {
+                override fun createDataSource(): DataSource {
+                    return ByteArrayDataSource(data)
+                }
+            }
+        )
+            .createMediaSource(mediaItem)
+        player.setMediaSource(mediaSource)
         player.prepare()
         player.play()
         updatePlaybackSegment(queue.segments.firstOrNull())
@@ -1038,27 +1048,27 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         appendLog("TTS预加载: 请求URL index=$sentenceIndex url=$audioUrl")
         val request = Request.Builder().url(audioUrl).build()
         return withContext(Dispatchers.IO) {
-            runCatching {
+            try {
                 httpClient.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) {
                         appendLog("TTS预加载: 请求失败 index=$sentenceIndex code=${response.code} url=$audioUrl")
-                        return@runCatching false
+                        return@withContext false
                     }
                     val contentType = response.header("Content-Type").orEmpty()
                     val bytes = response.body?.bytes() ?: run {
                         appendLog("TTS预加载: 响应无内容 index=$sentenceIndex url=$audioUrl")
-                        return@runCatching false
+                        return@withContext false
                     }
                     if (!contentType.contains("audio") && bytes.size < 2000) {
                         appendLog("TTS预加载: 音频无效 index=$sentenceIndex contentType=$contentType size=${bytes.size} url=$audioUrl")
-                        return@runCatching false
+                        return@withContext false
                     }
                     appendLog("TTS预加载: 收到音频 index=$sentenceIndex contentType=$contentType size=${bytes.size}")
                     cacheAudio(chapterIndex, sentenceIndex, bytes)
                     true
                 }
-            }.getOrElse { error ->
-                appendLog("TTS预加载: 请求异常 index=$sentenceIndex error=${error}")
+            } catch (error: Exception) {
+                appendLog("TTS预加载: 请求异常 index=$sentenceIndex error=$error")
                 false
             }
         }
