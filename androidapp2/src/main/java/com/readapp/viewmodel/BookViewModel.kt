@@ -1123,23 +1123,28 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             appendLog("TTS预加载: 无法构建音频URL index=$sentenceIndex")
             return false
         }
+        appendLog("TTS预加载: 请求URL index=$sentenceIndex url=$audioUrl")
         val request = Request.Builder().url(audioUrl).build()
         return runCatching {
             httpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
-                    appendLog("TTS预加载: 请求失败 index=$sentenceIndex code=${response.code}")
+                    appendLog("TTS预加载: 请求失败 index=$sentenceIndex code=${response.code} url=$audioUrl")
                     return false
                 }
                 val contentType = response.header("Content-Type").orEmpty()
                 val bytes = response.body?.bytes() ?: return false
                 if (!contentType.contains("audio") && bytes.size < 2000) {
-                    appendLog("TTS预加载: 音频无效 index=$sentenceIndex contentType=$contentType size=${bytes.size}")
+                    appendLog("TTS预加载: 音频无效 index=$sentenceIndex contentType=$contentType size=${bytes.size} url=$audioUrl")
                     return false
                 }
+                appendLog("TTS预加载: 收到音频 index=$sentenceIndex contentType=$contentType size=${bytes.size}")
                 cacheAudio(chapterIndex, sentenceIndex, bytes)
                 true
             }
-        }.getOrDefault(false)
+        }.getOrElse { error ->
+            appendLog("TTS预加载: 请求异常 index=$sentenceIndex error=${error.localizedMessage}")
+            false
+        }
     }
 
     private suspend fun maybePreloadNextChapter() {
