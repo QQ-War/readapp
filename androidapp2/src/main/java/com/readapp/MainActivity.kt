@@ -84,6 +84,10 @@ fun ReadAppMain() {
 
                 BookshelfScreen(
                     books = books,
+                    isRefreshing = isLoading,
+                    onRefresh = {
+                        bookViewModel.refreshBooks()
+                    },
                     onBookClick = { book ->
                         bookViewModel.selectBook(book)
                         navController.navigate(Screen.Reading.route)
@@ -156,6 +160,9 @@ fun ReadAppMain() {
                         },
                         onReadingFontSizeChange = { size ->
                             bookViewModel.updateReadingFontSize(size)
+                        },
+                        onExit = {
+                            bookViewModel.saveBookProgress()
                         }
                     )
                 }

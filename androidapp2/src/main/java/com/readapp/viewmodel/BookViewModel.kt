@@ -873,6 +873,30 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         // TODO: 实现缓存清理逻辑
     }
 
+    fun saveBookProgress() {
+        val book = _selectedBook.value ?: return
+        val bookUrl = book.bookUrl ?: return
+        val token = _accessToken.value
+        if (token.isBlank()) return
+
+        val index = _currentChapterIndex.value
+        val title = _chapters.value.getOrNull(index)?.title ?: book.durChapterTitle
+
+        viewModelScope.launch {
+            repository.saveBookProgress(
+                currentServerEndpoint(),
+                _publicServerAddress.value.ifBlank { null },
+                token,
+                bookUrl,
+                index,
+                0.0,
+                title
+            ).onFailure { error ->
+                Log.w(TAG, "保存阅读进度失败: ${error.message}", error)
+            }
+        }
+    }
+
     // ==================== 辅助方法 ====================
 
     private fun currentServerEndpoint(): String {
