@@ -422,7 +422,6 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         chaptersResult.onSuccess { chapterList ->
             _chapters.value = chapterList
             appendLog("章节列表加载成功: ${chapterList.size} 章")
-            Log.d(TAG, "加载章节列表成功: ${chapterList.size} 章")
 
             if (chapterList.isNotEmpty()) {
                 val index = _currentChapterIndex.value.coerceIn(0, chapterList.lastIndex)
@@ -485,7 +484,6 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         appendLog(
             "请求章节内容: bookUrl=$bookUrl source=${book.origin.orEmpty()} index=$index chapterUrl=${chapter.url}"
         )
-        Log.d(TAG, "开始加载章节内容: 第${index + 1}章")
 
         return try {
             val result = repository.fetchChapterContent(
@@ -548,7 +546,6 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
 
         _totalParagraphs.value = currentParagraphs.size.coerceAtLeast(1)
 
-        Log.d(TAG, "章节内容加载成功: ${currentParagraphs.size} 个段落")
 
         if (_keepPlaying.value && !_isPlaying.value) {
             _currentParagraphIndex.value = 0
@@ -681,7 +678,6 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        Log.d(TAG, "播放段落 $index: ${sentence.take(20)}...")
 
         val cached = getCachedAudio(currentChapterIndex = _currentChapterIndex.value, sentenceIndex = index)
         if (cached != null) {
@@ -764,7 +760,6 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         enginesResult.onSuccess { list ->
             engines = list
             _availableTtsEngines.value = list
-            Log.d(TAG, "加载TTS引擎成功: ${list.size} 个")
         }.onFailure { error ->
             _errorMessage.value = error.message
         }
@@ -876,7 +871,6 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearCache() {
         // TODO: 实现缓存清理逻辑
-        Log.d(TAG, "清除缓存")
     }
 
     // ==================== 辅助方法 ====================
@@ -1013,7 +1007,9 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun startPreloading(currentIndex: Int, count: Int) {
         val endIndex = min(currentIndex + count, currentParagraphs.size - 1)
         val candidateIndices = if (currentIndex < endIndex) (currentIndex + 1..endIndex).toList() else emptyList()
+        appendLog("TTS预加载: currentIndex=$currentIndex count=$count candidates=${candidateIndices.size}")
         if (candidateIndices.isEmpty()) {
+            appendLog("TTS预加载: 无候选段落，尝试预载下一章")
             maybePreloadNextChapter()
             return
         }
@@ -1022,10 +1018,12 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         for (index in candidateIndices) {
             val sentence = currentParagraphs.getOrNull(index) ?: continue
             if (isPunctuationOnly(sentence)) {
+                appendLog("TTS预加载: 跳过纯标点 index=$index")
                 markPreloaded(index)
                 continue
             }
             if (getCachedAudio(_currentChapterIndex.value, index) != null) {
+                appendLog("TTS预加载: 已缓存 index=$index")
                 markPreloaded(index)
                 continue
             }
@@ -1033,10 +1031,12 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         if (neededIndices.isEmpty()) {
+            appendLog("TTS预加载: 无需新增预载，尝试预载下一章")
             maybePreloadNextChapter()
             return
         }
 
+        appendLog("TTS预加载: 更新队列 -> ${neededIndices.joinToString(",")}")
         updatePreloadQueue(neededIndices)
         processPreloadQueue()
     }
@@ -1046,12 +1046,14 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         preloadingJobActive = true
         viewModelScope.launch {
             try {
+                appendLog("TTS预加载: 开始处理队列")
                 val semaphore = Semaphore(maxConcurrentPreloads)
                 val jobs = mutableListOf<kotlinx.coroutines.Job>()
 
                 while (true) {
                     val index = dequeuePreloadIndex() ?: break
                     if (getCachedAudio(_currentChapterIndex.value, index) != null) {
+                        appendLog("TTS预加载: 队列跳过已缓存 index=$index")
                         markPreloaded(index)
                         continue
                     }
@@ -1070,8 +1072,10 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             } finally {
                 preloadingJobActive = false
                 if (hasPendingPreloadQueue()) {
+                    appendLog("TTS预加载: 队列仍有剩余，继续处理")
                     processPreloadQueue()
                 } else {
+                    appendLog("TTS预加载: 队列处理完成")
                     maybePreloadNextChapter()
                 }
             }
@@ -1081,26 +1085,32 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun downloadAudioWithRetry(index: Int) {
         val sentence = currentParagraphs.getOrNull(index) ?: return
         if (isPunctuationOnly(sentence)) {
+            appendLog("TTS预加载: 跳过纯标点 index=$index")
             markPreloaded(index)
             return
         }
 
         repeat(maxPreloadRetries + 1) { attempt ->
             if (getCachedAudio(_currentChapterIndex.value, index) != null) {
+                appendLog("TTS预加载: 已缓存 index=$index")
                 markPreloaded(index)
                 return
             }
 
+            appendLog("TTS预加载: 下载 index=$index attempt=${attempt + 1}")
             val success = downloadAndCacheAudio(_currentChapterIndex.value, index, sentence)
             if (success) {
+                appendLog("TTS预加载: 成功 index=$index")
                 markPreloaded(index)
                 return
             }
 
             if (attempt < maxPreloadRetries) {
+                appendLog("TTS预加载: 失败重试 index=$index")
                 delay(1000)
             }
         }
+        appendLog("TTS预加载: 最终失败 index=$index")
     }
 
     private suspend fun downloadAndCacheAudio(
@@ -1109,14 +1119,23 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         sentence: String,
         isChapterTitle: Boolean = false
     ): Boolean {
-        val audioUrl = buildTtsAudioUrl(sentence, isChapterTitle) ?: return false
+        val audioUrl = buildTtsAudioUrl(sentence, isChapterTitle) ?: run {
+            appendLog("TTS预加载: 无法构建音频URL index=$sentenceIndex")
+            return false
+        }
         val request = Request.Builder().url(audioUrl).build()
         return runCatching {
             httpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return false
+                if (!response.isSuccessful) {
+                    appendLog("TTS预加载: 请求失败 index=$sentenceIndex code=${response.code}")
+                    return false
+                }
                 val contentType = response.header("Content-Type").orEmpty()
                 val bytes = response.body?.bytes() ?: return false
-                if (!contentType.contains("audio") && bytes.size < 2000) return false
+                if (!contentType.contains("audio") && bytes.size < 2000) {
+                    appendLog("TTS预加载: 音频无效 index=$sentenceIndex contentType=$contentType size=${bytes.size}")
+                    return false
+                }
                 cacheAudio(chapterIndex, sentenceIndex, bytes)
                 true
             }
@@ -1130,6 +1149,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         val nextIndex = _currentChapterIndex.value + 1
         if (nextIndex > _chapters.value.lastIndex) return
         if (nextChapterSentences.isNotEmpty()) return
+        appendLog("TTS预加载: 触发下一章预载 nextIndex=$nextIndex")
 
         val book = _selectedBook.value ?: return
         val bookUrl = book.bookUrl ?: return
@@ -1148,6 +1168,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             viewModelScope.launch {
                 nextChapterSentences = splitTextIntoSentences(content.orEmpty())
                 _preloadedChapters.value = _preloadedChapters.value + nextIndex
+                appendLog("TTS预加载: 下一章分段完成 size=${nextChapterSentences.size}")
                 preloadNextChapterAudio(nextIndex)
             }
         }
@@ -1156,6 +1177,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun preloadNextChapterAudio(chapterIndex: Int) {
         if (nextChapterSentences.isEmpty()) return
         val limit = min(nextChapterSentences.size, _preloadCount.value)
+        appendLog("TTS预加载: 下一章音频预载 chapterIndex=$chapterIndex limit=$limit")
         for (i in 0 until limit) {
             val sentence = nextChapterSentences[i]
             if (isPunctuationOnly(sentence)) continue
@@ -1303,16 +1325,12 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun appendDebugLog(message: String) {
-        appendLog(message)
-    }
 
     // ==================== 清理 ====================
 
     override fun onCleared() {
         super.onCleared()
         player.release()
-        Log.d(TAG, "ViewModel cleared")
     }
 
 }

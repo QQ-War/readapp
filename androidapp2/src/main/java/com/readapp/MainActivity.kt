@@ -127,9 +127,6 @@ fun ReadAppMain() {
                         onLoadChapterContent = { index ->
                             bookViewModel.loadChapterContent(index)
                         },
-                        onLogEvent = { message ->
-                            bookViewModel.appendDebugLog(message)
-                        },
                         onNavigateBack = {
                             // 如果正在播放，先停止
                             if (isPlaying) {
