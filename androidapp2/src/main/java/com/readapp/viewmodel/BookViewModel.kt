@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -96,7 +97,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
                 appendLog("TTS player error: ${error.errorCodeName} ${error.message}")
                 _errorMessage.value = "播放失败: ${error.errorCodeName}"
                 // Simple retry logic
-                speakNextParagraph(isRetry = true)
+                speakNextParagraph()
             }
         })
     }
@@ -945,7 +946,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun extractSpeaker(sentence: String): String? {
-        val regex = "^\\s*([\\p{Han}A-Za-z0-9_·]{1,12})[\\s　]*[：:，,]?\s*[\"“]".toRegex()
+        val regex = "^\\s*([\\p{Han}A-Za-z0-9_·]{1,12})[\\s　]*[：:，,]?\\s*[\"“]".toRegex()
         val match = regex.find(sentence) ?: return null
         return match.groups[1]?.value?.trim()
     }
