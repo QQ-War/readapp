@@ -87,6 +87,10 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
                 updatePlaybackSegment(segment)
             }
 
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                appendLog("TTS playWhenReady=$playWhenReady reason=$reason state=${player.playbackState}")
+            }
+
             override fun onPlaybackStateChanged(playbackState: Int) {
                 appendLog("TTS playback state=$playbackState playWhenReady=$playWhenReady")
                 if (playbackState == Player.STATE_ENDED) {
@@ -663,11 +667,13 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun pausePlayback() {
+        appendLog("TTS pause: playWhenReady=${player.playWhenReady} state=${player.playbackState}")
         player.playWhenReady = false
         _keepPlaying.value = false
     }
 
     private fun stopPlayback() {
+        appendLog("TTS stop")
         player.stop()
         _isPlaying.value = false
         _keepPlaying.value = false
@@ -1002,6 +1008,11 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         player.setMediaItems(queue.mediaItems, queue.segments.indexOfFirst { it.chapterIndex == chapterIndex && it.paragraphIndex == paragraphIndex }.coerceAtLeast(0), 0L)
         player.prepare()
         player.play()
+        appendLog("TTS play called: state=${player.playbackState} playWhenReady=${player.playWhenReady}")
+        viewModelScope.launch {
+            delay(300)
+            appendLog("TTS play check: state=${player.playbackState} playWhenReady=${player.playWhenReady} isPlaying=${player.isPlaying}")
+        }
         updatePlaybackSegment(queue.segments.firstOrNull())
     }
 
