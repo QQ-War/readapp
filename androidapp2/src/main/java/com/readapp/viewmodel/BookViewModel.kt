@@ -549,6 +549,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
 
 
         if (_keepPlaying.value && !_isPlaying.value) {
+            appendLog("TTS auto-resume after content load: chapter=$index")
             _currentParagraphIndex.value = 0
             startPlayback()
         }
@@ -591,8 +592,19 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun startPlayback() {
         viewModelScope.launch {
+            appendLog("TTS start: chapter=${_currentChapterIndex.value} paragraph=${_currentParagraphIndex.value} loading=${_isContentLoading.value}")
+            // If content is still loading, keep the intent to play and let updateChapterContent resume later.
+            _keepPlaying.value = true
+
             // 确保有章节内容
-            val content = ensureCurrentChapterContent() ?: return@launch
+            val content = ensureCurrentChapterContent()
+            if (content.isNullOrBlank()) {
+                appendLog("TTS start blocked: content empty, loading=${_isContentLoading.value}")
+                if (!_isContentLoading.value) {
+                    _keepPlaying.value = false
+                }
+                return@launch
+            }
 
             // 如果还没有段落索引，从第一段开始
             if (_currentParagraphIndex.value < 0) {
@@ -607,6 +619,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
 
             ReadAudioService.startService(appContext)
 
+            appendLog("TTS start play: chapter=${_currentChapterIndex.value} paragraph=${_currentParagraphIndex.value} segments=${currentSentences.size}")
             startPlaybackFrom(_currentChapterIndex.value, _currentParagraphIndex.value)
 
             // 开始观察播放进度
@@ -944,6 +957,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         val startIndex = paragraphIndex.coerceAtLeast(0)
         val queue = buildPlaybackQueue(book, chapterIndex, startIndex)
         if (queue.mediaItems.isEmpty()) {
+            appendLog("TTS queue empty: chapter=$chapterIndex paragraph=$paragraphIndex")
             _errorMessage.value = "无法获取TTS音频地址"
             return
         }
