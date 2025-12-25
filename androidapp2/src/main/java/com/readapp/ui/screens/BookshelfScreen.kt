@@ -1,4 +1,6 @@
 // BookshelfScreen.kt - 书架页面（带右上角设置按钮）
+@file:OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
+
 package com.readapp.ui.screens
 
 import androidx.compose.foundation.background
@@ -12,6 +14,7 @@ import androidx.compose.material.icons.filled.Book as BookIcon
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
@@ -29,8 +32,6 @@ import coil.compose.AsyncImage
 import com.readapp.data.model.Book
 import com.readapp.ui.theme.AppDimens
 import com.readapp.ui.theme.customColors
-
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BookshelfScreen(
     books: List<Book>,
