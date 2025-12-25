@@ -7,6 +7,7 @@ struct BookListView: View {
     @State private var searchText = ""
     @State private var isReversed = false
     @State private var showingActionSheet = false  // 显示操作菜单
+    @State private var showingDocumentPicker = false
     
     // 过滤和排序后的书籍列表
     var filteredAndSortedBooks: [Book] {
@@ -89,8 +90,21 @@ struct BookListView: View {
             }
             
             ToolbarItemGroup(placement: .navigationBarTrailing) {
+                Button(action: {
+                    showingDocumentPicker = true
+                }) {
+                    Image(systemName: "plus")
+                }
+                
                 NavigationLink(destination: SettingsView()) {
                     Image(systemName: "gearshape")
+                }
+            }
+        }
+        .sheet(isPresented: $showingDocumentPicker) {
+            DocumentPicker { url in
+                Task {
+                    await importBook(from: url)
                 }
             }
         }
@@ -142,6 +156,17 @@ struct BookListView: View {
             try await apiService.fetchBookshelf()
         } catch {
             apiService.errorMessage = error.localizedDescription
+        }
+        isRefreshing = false
+    }
+    
+    private func importBook(from url: URL) async {
+        isRefreshing = true
+        do {
+            try await apiService.importBook(from: url)
+            await loadBooks()
+        } catch {
+            apiService.errorMessage = "导入失败: \(error.localizedDescription)"
         }
         isRefreshing = false
     }

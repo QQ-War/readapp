@@ -5,6 +5,11 @@ import com.readapp.data.model.Chapter
 import com.readapp.data.model.HttpTTS
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import retrofit2.Response
+import android.content.Context
+import android.net.Uri
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
 
 class ReadRepository(private val apiFactory: (String) -> ReadApiService) {
 
@@ -56,6 +61,62 @@ class ReadRepository(private val apiFactory: (String) -> ReadApiService) {
 
     suspend fun fetchTtsEngines(baseUrl: String, publicUrl: String?, accessToken: String): Result<List<HttpTTS>> =
         executeWithFailover { it.getAllTts(accessToken) }(buildEndpoints(baseUrl, publicUrl))
+
+    suspend fun importBook(
+        baseUrl: String,
+        publicUrl: String?,
+        accessToken: String,
+        fileUri: Uri,
+        context: Context
+    ): Result<Any> {
+        val filePart = createMultipartBodyPart(fileUri, context)
+            ?: return Result.failure(IllegalArgumentException("无法创建文件部分"))
+
+        return executeWithFailover {
+            it.importBook(accessToken, filePart)
+        }(buildEndpoints(baseUrl, publicUrl))
+    }
+
+    private fun createMultipartBodyPart(fileUri: Uri, context: Context): MultipartBody.Part? {
+        return context.contentResolver.openInputStream(fileUri)?.use { inputStream ->
+            val fileBytes = inputStream.readBytes()
+            val requestFile = fileBytes.toRequestBody(
+                context.contentResolver.getType(fileUri)?.toMediaTypeOrNull()
+            )
+            MultipartBody.Part.createFormData(
+                "file",
+                getFileName(fileUri, context),
+                requestFile
+            )
+        }
+    }
+
+    private fun getFileName(uri: Uri, context: Context): String? {
+        var result: String? = null
+        if (uri.scheme == "content") {
+            val cursor = context.contentResolver.query(uri, null, null, null, null)
+            try {
+                if (cursor != null && cursor.moveToFirst()) {
+                    val columnIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (columnIndex >= 0) {
+                        result = cursor.getString(columnIndex)
+                    }
+                }
+            } finally {
+                cursor?.close()
+            }
+        }
+        if (result == null) {
+            result = uri.path
+            val cut = result?.lastIndexOf('/')
+            if (cut != -1) {
+                if (cut != null) {
+                    result = result?.substring(cut + 1)
+                }
+            }
+        }
+        return result
+    }
 
     fun buildTtsAudioUrl(baseUrl: String, accessToken: String, ttsId: String, text: String, speechRate: Double): String? {
         val normalized = ensureTrailingSlash(baseUrl)

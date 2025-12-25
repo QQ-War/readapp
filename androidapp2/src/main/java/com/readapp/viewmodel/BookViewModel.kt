@@ -9,6 +9,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.PlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import com.readapp.data.ReadApiService
 import com.readapp.data.ReadRepository
@@ -77,18 +78,25 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 _isPlaying.value = isPlaying
+                appendLog("TTS player isPlaying=$isPlaying")
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 val segment = playbackSegments.getOrNull(currentMediaItemIndex)
+                appendLog("TTS media transition: reason=$reason index=$currentMediaItemIndex segment=$segment")
                 updatePlaybackSegment(segment)
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
+                appendLog("TTS playback state=$playbackState playWhenReady=$playWhenReady")
                 if (playbackState == Player.STATE_ENDED) {
                     _playbackProgress.value = 1f
                     stopPlayback()
                 }
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                appendLog("TTS player error: ${error.errorCodeName} ${error.message}")
             }
         })
     }
@@ -302,6 +310,31 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             _narrationTtsEngine.value = ""
             _dialogueTtsEngine.value = ""
             _speakerTtsMapping.value = emptyMap()
+        }
+    }
+
+    fun importBook(uri: android.net.Uri) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _errorMessage.value = null
+
+            val result = repository.importBook(
+                currentServerEndpoint(),
+                _publicServerAddress.value.ifBlank { null },
+                _accessToken.value,
+                uri,
+                appContext
+            )
+
+            result.onFailure { error ->
+                _errorMessage.value = error.message
+            }
+
+            result.onSuccess {
+                refreshBooksInternal(showLoading = false)
+            }
+
+            _isLoading.value = false
         }
     }
 
@@ -582,6 +615,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
 
     fun togglePlayPause() {
         if (_selectedBook.value == null) return
+        appendLog("TTS toggle: isPlaying=${_isPlaying.value} keepPlaying=${_keepPlaying.value}")
 
         if (!_isPlaying.value) {
             startPlayback()
@@ -617,6 +651,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             _totalParagraphs.value = currentSentences.size.coerceAtLeast(1)
             _keepPlaying.value = true
 
+            appendLog("TTS start service")
             ReadAudioService.startService(appContext)
 
             appendLog("TTS start play: chapter=${_currentChapterIndex.value} paragraph=${_currentParagraphIndex.value} segments=${currentSentences.size}")
@@ -963,6 +998,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         playbackSegments = queue.segments
+        appendLog("TTS queue built: items=${queue.mediaItems.size} segments=${queue.segments.size} chapters=${queue.preloadedChapters.size}")
         player.setMediaItems(queue.mediaItems, queue.segments.indexOfFirst { it.chapterIndex == chapterIndex && it.paragraphIndex == paragraphIndex }.coerceAtLeast(0), 0L)
         player.prepare()
         player.play()

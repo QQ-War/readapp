@@ -7,6 +7,8 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -28,6 +30,8 @@ import com.readapp.ui.screens.ReadingScreen
 import com.readapp.ui.screens.SettingsScreen
 import com.readapp.ui.theme.ReadAppTheme
 import com.readapp.viewmodel.BookViewModel
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -49,6 +53,14 @@ fun ReadAppMain() {
     val isInitialized by bookViewModel.isInitialized.collectAsState()
     val isLoading by bookViewModel.isLoading.collectAsState()
     val context = LocalContext.current
+
+    val importBookLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            bookViewModel.importBook(it)
+        }
+    }
 
     if (!isInitialized) {
         Box(
@@ -97,6 +109,9 @@ fun ReadAppMain() {
                     },
                     onSettingsClick = {
                         navController.navigate(Screen.Settings.route)
+                    },
+                    onImportClick = {
+                        importBookLauncher.launch("*/*")
                     }
                 )
             }

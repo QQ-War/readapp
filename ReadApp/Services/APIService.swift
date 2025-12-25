@@ -466,5 +466,60 @@ class APIService: ObservableObject {
                          userInfo: [NSLocalizedDescriptionKey: apiResponse.errorMsg ?? "清除缓存失败"])
         }
     }
+
+    // MARK: - 导入书籍
+    func importBook(from url: URL) async throws {
+        guard url.startAccessingSecurityScopedResource() else {
+            throw NSError(domain: "APIService", code: 500, userInfo: [NSLocalizedDescriptionKey: "无法访问文件"])
+        }
+        defer { url.stopAccessingSecurityScopedResource() }
+        
+        let fileData = try Data(contentsOf: url)
+        let filename = url.lastPathComponent
+        
+        let urlString = "\(baseURL)/importBookPreview"
+        guard let requestUrl = URL(string: urlString) else {
+            throw NSError(domain: "APIService", code: 400, userInfo: [NSLocalizedDescriptionKey: "无效的URL"])
+        }
+        
+        var request = URLRequest(url: requestUrl)
+        request.httpMethod = "POST"
+        
+        let boundary = "Boundary-\(UUID().uuidString)"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        
+        var body = Data()
+        
+        // Add accessToken
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"accessToken\"\r\n\r\n".data(using: .utf8)!)
+        body.append("\(accessToken)\r\n".data(using: .utf8)!)
+        
+        // Add file data
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: \"application/octet-stream\"\r\n\r\n".data(using: .utf8)!)
+        body.append(fileData)
+        body.append("\r\n".data(using: .utf8)!)
+        
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        
+        let (data, response) = try await URLSession.shared.upload(for: request, from: body)
+        
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw NSError(domain: "APIService", code: 500, userInfo: [NSLocalizedDescriptionKey: "服务器错误"])
+        }
+        
+        let apiResponse = try JSONDecoder().decode(APIResponse<BookImportResponse>.self, from: data)
+        
+        if !apiResponse.isSuccess {
+            throw NSError(domain: "APIService", code: 500, userInfo: [NSLocalizedDescriptionKey: apiResponse.errorMsg ?? "导入失败"])
+        }
+    }
+}
+
+struct BookImportResponse: Codable {
+    let books: Book
+    let chapters: [BookChapter]
 }
 

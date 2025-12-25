@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Book as BookIcon
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
@@ -40,6 +41,7 @@ fun BookshelfScreen(
     onBookClick: (Book) -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onSettingsClick: () -> Unit,
+    onImportClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -71,6 +73,13 @@ fun BookshelfScreen(
                     }
                 },
                 actions = {
+                    // 导入按钮
+                    IconButton(onClick = onImportClick) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "导入书籍"
+                        )
+                    }
                     // 设置按钮
                     IconButton(onClick = onSettingsClick) {
                         Icon(
