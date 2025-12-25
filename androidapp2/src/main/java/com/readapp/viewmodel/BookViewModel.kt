@@ -88,11 +88,11 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
-                appendLog("TTS playWhenReady=$playWhenReady reason=$reason state=${player.playbackState}")
+                appendLog("TTS playWhenReady=$playWhenReady reason=$reason state=${this@apply.playbackState}")
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
-                appendLog("TTS playback state=$playbackState playWhenReady=$playWhenReady")
+                appendLog("TTS playback state=$playbackState playWhenReady=${this@apply.playWhenReady}")
                 if (playbackState == Player.STATE_ENDED) {
                     _playbackProgress.value = 1f
                     stopPlayback()
