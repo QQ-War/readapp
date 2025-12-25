@@ -509,11 +509,6 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         val chapter = _chapters.value.getOrNull(index) ?: return null
         val bookUrl = book.bookUrl ?: return null
 
-        if (_isContentLoading.value) {
-            appendLog("章节内容加载中，跳过请求: index=$index")
-            return _currentChapterContent.value.ifBlank { null }
-        }
-
         // 优先使用缓存内容
         val cached = chapter.content
         val cachedInMemory = chapterContentCache[index]
@@ -526,6 +521,11 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             appendLog("章节内容命中内存缓存: index=$index")
             updateChapterContent(index, cachedInMemory)
             return cachedInMemory
+        }
+
+        if (_isContentLoading.value) {
+            appendLog("章节内容加载中，跳过请求: index=$index")
+            return _currentChapterContent.value.ifBlank { null }
         }
 
         _isContentLoading.value = true
@@ -1014,7 +1014,9 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         if (chapters.isEmpty()) return
 
         val startIndex = paragraphIndex.coerceAtLeast(0)
-        val queue = buildPlaybackQueue(book, chapterIndex, startIndex)
+        val queue = withContext(Dispatchers.IO) {
+            buildPlaybackQueue(book, chapterIndex, startIndex)
+        }
         if (queue.mediaItems.isEmpty()) {
             appendLog("TTS queue empty: chapter=$chapterIndex paragraph=$paragraphIndex")
             _errorMessage.value = "无法获取TTS音频地址"
