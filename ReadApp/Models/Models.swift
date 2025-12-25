@@ -80,6 +80,12 @@ struct ReplaceRule: Codable {
     let name: String?
 }
 
+// MARK: - Book Import Response
+struct BookImportResponse: Codable {
+    let books: Book
+    let chapters: [BookChapter]
+}
+
 // MARK: - HttpTTS Model
 struct HttpTTS: Codable, Identifiable {
     let id: String

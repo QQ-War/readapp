@@ -2,6 +2,14 @@ import Foundation
 import Combine
 import UIKit
 
+extension Data {
+    mutating func append(_ string: String) {
+        if let data = string.data(using: .utf8) {
+            append(data)
+        }
+    }
+}
+
 class APIService: ObservableObject {
     static let shared = APIService()
     static let apiVersion = 5
@@ -490,19 +498,17 @@ class APIService: ObservableObject {
         
         var body = Data()
         
-        // Add accessToken
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"accessToken\"\r\n\r\n".data(using: .utf8)!)
-        body.append("\(accessToken)\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)\r\n")
+        body.append("Content-Disposition: form-data; name=\"accessToken\"\r\n\r\n")
+        body.append("\(accessToken)\r\n")
         
-        // Add file data
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: \"application/octet-stream\"\r\n\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)\r\n")
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n")
+        body.append("Content-Type: \"application/octet-stream\"\r\n\r\n")
         body.append(fileData)
-        body.append("\r\n".data(using: .utf8)!)
+        body.append("\r\n")
         
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)--\r\n")
         
         let (data, response) = try await URLSession.shared.upload(for: request, from: body)
         
@@ -516,10 +522,5 @@ class APIService: ObservableObject {
             throw NSError(domain: "APIService", code: 500, userInfo: [NSLocalizedDescriptionKey: apiResponse.errorMsg ?? "导入失败"])
         }
     }
-}
-
-struct BookImportResponse: Codable {
-    let books: Book
-    let chapters: [BookChapter]
 }
 
