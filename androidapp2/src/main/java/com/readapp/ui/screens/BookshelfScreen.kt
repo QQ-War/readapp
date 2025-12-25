@@ -12,6 +12,9 @@ import androidx.compose.material.icons.filled.Book as BookIcon
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,12 +34,18 @@ import com.readapp.ui.theme.customColors
 @Composable
 fun BookshelfScreen(
     books: List<Book>,
+    isRefreshing: Boolean,
+    onRefresh: () -> Unit,
     onBookClick: (Book) -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var searchQuery by remember { mutableStateOf("") }
+    val refreshState = rememberPullRefreshState(
+        refreshing = isRefreshing,
+        onRefresh = onRefresh
+    )
     
     Scaffold(
         topBar = {
@@ -76,60 +85,72 @@ fun BookshelfScreen(
             )
         }
     ) { paddingValues ->
-        LazyColumn(
+        Box(
             modifier = modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(horizontal = AppDimens.PaddingMedium),
-            verticalArrangement = Arrangement.spacedBy(AppDimens.PaddingMedium),
-            contentPadding = PaddingValues(bottom = AppDimens.PaddingLarge)
+                .pullRefresh(refreshState)
         ) {
-            item {
-                Spacer(modifier = Modifier.height(AppDimens.PaddingMedium))
-                SearchBar(
-                    query = searchQuery,
-                    onQueryChange = {
-                        searchQuery = it
-                        onSearchQueryChange(it)
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            if (books.isEmpty()) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = AppDimens.PaddingMedium),
+                verticalArrangement = Arrangement.spacedBy(AppDimens.PaddingMedium),
+                contentPadding = PaddingValues(bottom = AppDimens.PaddingLarge)
+            ) {
                 item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 48.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.BookIcon,
-                                contentDescription = null,
-                                modifier = Modifier.size(64.dp),
-                                tint = MaterialTheme.customColors.textSecondary
-                            )
-                            Text(
-                                text = "暂无书籍",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.customColors.textSecondary
-                            )
-                        }
-                    }
-                }
-            } else {
-                items(books) { book ->
-                    BookRow(
-                        book = book,
-                        onClick = { onBookClick(book) }
+                    Spacer(modifier = Modifier.height(AppDimens.PaddingMedium))
+                    SearchBar(
+                        query = searchQuery,
+                        onQueryChange = {
+                            searchQuery = it
+                            onSearchQueryChange(it)
+                        },
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
+
+                if (books.isEmpty()) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 48.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.BookIcon,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(64.dp),
+                                    tint = MaterialTheme.customColors.textSecondary
+                                )
+                                Text(
+                                    text = "暂无书籍",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.customColors.textSecondary
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    items(books) { book ->
+                        BookRow(
+                            book = book,
+                            onClick = { onBookClick(book) }
+                        )
+                    }
+                }
             }
+
+            PullRefreshIndicator(
+                refreshing = isRefreshing,
+                state = refreshState,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
         }
     }
 }
