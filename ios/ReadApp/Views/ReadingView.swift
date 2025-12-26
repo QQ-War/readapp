@@ -16,7 +16,7 @@ struct ReadingView: View {
     @State private var isLoading = false
     @State private var showChapterList = false
     @State private var errorMessage: String?
-    @State private var showUIControls = true
+    @State private var showUIControls = false
     @State private var scrollProxy: ScrollViewProxy?
     @State private var lastTTSSentenceIndex: Int?
     @State private var showFontSettings = false
@@ -38,91 +38,94 @@ struct ReadingView: View {
             VStack(spacing: 0) {
                 if preferences.readingMode == .horizontal && !ttsManager.isPlaying {
                     GeometryReader { geometry in
+                        let contentInsets = EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16)
                         TabView(selection: $currentPageIndex) {
                             ForEach(Array(paginatedPages.enumerated()), id: \.offset) { index, page in
-                                ScrollView {
-                                    VStack(alignment: .leading, spacing: 16) {
-                                        if showUIControls {
-                                            if currentChapterIndex < chapters.count {
-                                                Text(chapters[currentChapterIndex].title)
-                                                    .font(.title2)
-                                                    .fontWeight(.bold)
-                                                    .padding(.bottom, 8)
-                                            }
-                                        }
-                                        Text(page.text)
-                                            .font(.system(size: preferences.fontSize))
-                                            .lineSpacing(preferences.lineSpacing)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                    }
-                                    .padding()
-                                }
-                                .tag(index)
+                                Text(page.text)
+                                    .font(.system(size: preferences.fontSize))
+                                    .lineSpacing(preferences.lineSpacing)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                                    .padding(contentInsets)
+                                    .tag(index)
                             }
                         }
                         .tabViewStyle(PageTabViewStyle())
                         .onAppear {
-                            repaginateContent(in: geometry.size)
+                            repaginateContent(in: geometry.size, contentInsets: contentInsets)
                         }
                         .onChange(of: contentSentences) { _ in
-                            repaginateContent(in: geometry.size)
+                            repaginateContent(in: geometry.size, contentInsets: contentInsets)
                         }
                         .onChange(of: preferences.fontSize) { _ in
-                            repaginateContent(in: geometry.size)
+                            repaginateContent(in: geometry.size, contentInsets: contentInsets)
                         }
                         .onChange(of: preferences.lineSpacing) { _ in
-                            repaginateContent(in: geometry.size)
+                            repaginateContent(in: geometry.size, contentInsets: contentInsets)
                         }
                     }
                     .overlay {
                         GeometryReader { geometry in
                             if #available(iOS 17.0, *) {
-                                let doubleTap = SpatialTapGesture(count: 2)
-                                    .onEnded { value in
-                                        let tapX = value.location.x
-                                        let width = geometry.size.width
-                                        if tapX >= width / 3, tapX < width * 2 / 3 {
-                                            withAnimation(.easeInOut(duration: 0.3)) {
-                                                showUIControls.toggle()
-                                            }
-                                        }
-                                    }
                                 let singleTap = SpatialTapGesture(count: 1)
                                     .onEnded { value in
                                         let tapX = value.location.x
                                         let width = geometry.size.width
-                                        if tapX < width / 3 {
+                                        if showUIControls {
+                                            withAnimation(.easeInOut(duration: 0.3)) {
+                                                showUIControls = false
+                                            }
+                                        } else if tapX < width / 3 {
                                             goToPreviousPage()
                                         } else if tapX < width * 2 / 3 {
-                                            goToNextPage()
+                                            withAnimation(.easeInOut(duration: 0.3)) {
+                                                showUIControls = true
+                                            }
                                         } else {
                                             goToNextPage()
                                         }
                                     }
                                 Color.clear
                                     .contentShape(Rectangle())
-                                    .gesture(ExclusiveGesture(doubleTap, singleTap))
+                                    .gesture(singleTap)
                             } else {
                                 // Fallback for iOS < 17: use three tappable regions to mimic left/middle/right taps
                                 HStack(spacing: 0) {
                                     Color.clear
                                         .contentShape(Rectangle())
                                         .onTapGesture {
-                                            goToPreviousPage()
-                                        }
-                                        .frame(width: geometry.size.width / 3)
-                                    Color.clear
-                                        .contentShape(Rectangle())
-                                        .onTapGesture {
-                                            withAnimation(.easeInOut(duration: 0.3)) {
-                                                showUIControls.toggle()
+                                            if showUIControls {
+                                                withAnimation(.easeInOut(duration: 0.3)) {
+                                                    showUIControls = false
+                                                }
+                                            } else {
+                                                goToPreviousPage()
                                             }
                                         }
                                         .frame(width: geometry.size.width / 3)
                                     Color.clear
                                         .contentShape(Rectangle())
                                         .onTapGesture {
-                                            goToNextPage()
+                                            if showUIControls {
+                                                withAnimation(.easeInOut(duration: 0.3)) {
+                                                    showUIControls = false
+                                                }
+                                            } else {
+                                                withAnimation(.easeInOut(duration: 0.3)) {
+                                                    showUIControls = true
+                                                }
+                                            }
+                                        }
+                                        .frame(width: geometry.size.width / 3)
+                                    Color.clear
+                                        .contentShape(Rectangle())
+                                        .onTapGesture {
+                                            if showUIControls {
+                                                withAnimation(.easeInOut(duration: 0.3)) {
+                                                    showUIControls = false
+                                                }
+                                            } else {
+                                                goToNextPage()
+                                            }
                                         }
                                         .frame(width: geometry.size.width / 3)
                                 }
@@ -449,10 +452,14 @@ struct ReadingView: View {
         }
     }
 
-    private func repaginateContent(in size: CGSize) {
+    private func repaginateContent(in size: CGSize, contentInsets: EdgeInsets) {
+        let contentSize = CGSize(
+            width: max(0, size.width - (contentInsets.leading + contentInsets.trailing)),
+            height: max(0, size.height - (contentInsets.top + contentInsets.bottom))
+        )
         paginatedPages = TextPaginator.paginate(
             contentSentences,
-            in: size,
+            in: contentSize,
             fontSize: preferences.fontSize,
             lineSpacing: preferences.lineSpacing
         )

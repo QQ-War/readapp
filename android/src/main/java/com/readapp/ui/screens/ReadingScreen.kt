@@ -38,8 +38,16 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.awaitEachGesture
+import androidx.compose.ui.input.pointer.awaitFirstDown
+import androidx.compose.ui.input.pointer.awaitPointerEvent
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -233,35 +241,64 @@ fun ReadingScreen(
                         fontSize = readingFontSize.sp,
                         lineHeight = (readingFontSize * 1.8f).sp
                     )
+                    val pagePadding = remember(showControls) {
+                        PaddingValues(
+                            start = AppDimens.PaddingLarge,
+                            end = AppDimens.PaddingLarge,
+                            top = if (showControls) 80.dp else AppDimens.PaddingLarge,
+                            bottom = if (showControls) 120.dp else AppDimens.PaddingLarge
+                        )
+                    }
+                    val density = LocalDensity.current
+                    val availableConstraints = remember(constraints, pagePadding, density) {
+                        adjustedConstraints(constraints, pagePadding, density)
+                    }
                     
                     val paginatedPages = rememberPaginatedText(
                         paragraphs = paragraphs,
                         style = style,
-                        constraints = constraints
+                        constraints = availableConstraints
                     )
                     val pagerState = rememberPagerState { paginatedPages.size.coerceAtLeast(1) }
+                    val viewConfiguration = LocalViewConfiguration.current
 
                     Box(modifier = Modifier.fillMaxSize()) {
                         HorizontalPager(
                             state = pagerState,
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .pointerInput(
+                                    showControls,
+                                    paginatedPages,
+                                    currentChapterIndex,
+                                    viewConfiguration
+                                ) {
+                                    detectTapGesturesWithoutConsuming(viewConfiguration) { offset, size ->
+                                        handleHorizontalTap(
+                                            offset = offset,
+                                            size = size,
+                                            showControls = showControls,
+                                            pagerState = pagerState,
+                                            paginatedPages = paginatedPages,
+                                            currentChapterIndex = currentChapterIndex,
+                                            chapters = chapters,
+                                            onChapterClick = onChapterClick,
+                                            coroutineScope = coroutineScope,
+                                            onToggleControls = { showControls = it }
+                                        )
+                                    }
+                                }
                         ) { page ->
                             val pageText = paginatedPages.getOrNull(page)?.text.orEmpty()
-                            LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(
-                                    start = AppDimens.PaddingLarge,
-                                    end = AppDimens.PaddingLarge,
-                                    top = if (showControls) 80.dp else AppDimens.PaddingLarge,
-                                    bottom = if (showControls) 120.dp else AppDimens.PaddingLarge
-                                )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(pagePadding)
                             ) {
-                                item {
-                                    Text(
-                                        text = pageText,
-                                        style = style
-                                    )
-                                }
+                                Text(
+                                    text = pageText,
+                                    style = style
+                                )
                             }
                         }
 
@@ -272,52 +309,6 @@ fun ReadingScreen(
                                 ?: 0
                         }
 
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .pointerInput(pagerState.currentPage, paginatedPages, currentChapterIndex) {
-                                    detectTapGestures(
-                                        onTap = { offset ->
-                                            val width = size.width
-                                            when {
-                                                offset.x < width / 3f -> {
-                                                    coroutineScope.launch {
-                                                        if (pagerState.currentPage > 0) {
-                                                            pagerState.animateScrollToPage(pagerState.currentPage - 1)
-                                                        } else if (currentChapterIndex > 0) {
-                                                            onChapterClick(currentChapterIndex - 1)
-                                                        }
-                                                    }
-                                                }
-                                                offset.x < width * 2f / 3f -> {
-                                                    coroutineScope.launch {
-                                                        if (pagerState.currentPage < paginatedPages.lastIndex) {
-                                                            pagerState.animateScrollToPage(pagerState.currentPage + 1)
-                                                        } else if (currentChapterIndex < chapters.size - 1) {
-                                                            onChapterClick(currentChapterIndex + 1)
-                                                        }
-                                                    }
-                                                }
-                                                else -> {
-                                                    coroutineScope.launch {
-                                                        if (pagerState.currentPage < paginatedPages.lastIndex) {
-                                                            pagerState.animateScrollToPage(pagerState.currentPage + 1)
-                                                        } else if (currentChapterIndex < chapters.size - 1) {
-                                                            onChapterClick(currentChapterIndex + 1)
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        },
-                                        onDoubleTap = { offset ->
-                                            val width = size.width
-                                            if (offset.x >= width / 3f && offset.x < width * 2f / 3f) {
-                                                showControls = !showControls
-                                            }
-                                        }
-                                    )
-                                }
-                        )
                     }
                 }
             }
@@ -537,6 +528,103 @@ private fun lastVisibleOffset(result: androidx.compose.ui.text.TextLayoutResult)
         return 0
     }
     return result.getLineEnd(result.lineCount - 1, visibleEnd = true)
+}
+
+private fun adjustedConstraints(
+    constraints: Constraints,
+    paddingValues: PaddingValues,
+    density: Density
+): Constraints {
+    val horizontalPaddingPx = with(density) {
+        paddingValues.calculateLeftPadding(LayoutDirection.Ltr).toPx() +
+            paddingValues.calculateRightPadding(LayoutDirection.Ltr).toPx()
+    }
+    val verticalPaddingPx = with(density) {
+        paddingValues.calculateTopPadding().toPx() +
+            paddingValues.calculateBottomPadding().toPx()
+    }
+    val maxWidth = (constraints.maxWidth - horizontalPaddingPx).toInt().coerceAtLeast(0)
+    val maxHeight = (constraints.maxHeight - verticalPaddingPx).toInt().coerceAtLeast(0)
+    return Constraints(
+        minWidth = 0,
+        maxWidth = maxWidth,
+        minHeight = 0,
+        maxHeight = maxHeight
+    )
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectTapGesturesWithoutConsuming(
+    viewConfiguration: androidx.compose.ui.platform.ViewConfiguration,
+    onTap: (Offset, IntSize) -> Unit
+) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        var isTap = true
+        var tapPosition = down.position
+        val slop = viewConfiguration.touchSlop
+        while (true) {
+            val event = awaitPointerEvent()
+            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+            if (change.positionChanged()) {
+                val distance = (change.position - down.position).getDistance()
+                if (distance > slop) {
+                    isTap = false
+                }
+            }
+            if (change.changedToUp()) {
+                tapPosition = change.position
+                break
+            }
+        }
+        if (isTap) {
+            onTap(tapPosition, size)
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+private fun handleHorizontalTap(
+    offset: Offset,
+    size: IntSize,
+    showControls: Boolean,
+    pagerState: androidx.compose.foundation.pager.PagerState,
+    paginatedPages: List<PaginatedPage>,
+    currentChapterIndex: Int,
+    chapters: List<Chapter>,
+    onChapterClick: (Int) -> Unit,
+    coroutineScope: kotlinx.coroutines.CoroutineScope,
+    onToggleControls: (Boolean) -> Unit
+) {
+    if (showControls) {
+        onToggleControls(false)
+        return
+    }
+
+    val width = size.width.toFloat()
+    when {
+        offset.x < width / 3f -> {
+            coroutineScope.launch {
+                if (pagerState.currentPage > 0) {
+                    pagerState.animateScrollToPage(pagerState.currentPage - 1)
+                } else if (currentChapterIndex > 0) {
+                    onChapterClick(currentChapterIndex - 1)
+                }
+            }
+        }
+        offset.x < width * 2f / 3f -> {
+            onToggleControls(true)
+        }
+        else -> {
+            coroutineScope.launch {
+                if (pagerState.currentPage < paginatedPages.lastIndex) {
+                    pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                } else if (currentChapterIndex < chapters.size - 1) {
+                    onChapterClick(currentChapterIndex + 1)
+                }
+            }
+        }
+    }
 }
 
 
