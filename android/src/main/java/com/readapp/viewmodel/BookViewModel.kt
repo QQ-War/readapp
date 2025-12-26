@@ -11,14 +11,11 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.PlaybackException
-import androidx.media3.exoplayer.ExoPlayer
-import com.readapp.data.ReadApiService
-import com.readapp.data.ReadRepository
-import com.readapp.data.UserPreferences
-import com.readapp.data.model.Book
-import com.readapp.data.model.Chapter
-import com.readapp.data.model.HttpTTS
-import com.readapp.media.PlayerPool
+import android.content.ComponentName
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
+import com.google.common.util.concurrent.MoreExecutors
+import com.readapp.media.AudioCache
 import com.readapp.media.ReadAudioService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -32,20 +29,16 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-import android.util.LruCache
-import androidx.media3.datasource.ByteArrayDataSource
-import androidx.media3.datasource.DataSource
-import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import com.readapp.data.model.ReplaceRule
 import okhttp3.OkHttpClient
 import okhttp3.Request
+
 class BookViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
         private const val TAG = "BookViewModel"
         private const val LOG_FILE_NAME = "reader_logs.txt"
         private const val LOG_EXPORT_NAME = "reader_logs_export.txt"
-        private const val MAX_AUDIO_CACHE_BYTES = 20 * 1024 * 1024
 
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
@@ -63,21 +56,13 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         ReadApiService.create(endpoint) { accessToken.value }
     }
 
-    private val playerListener = AppPlayerListener()
-    private val player: ExoPlayer = PlayerPool.get(appContext).apply { addListener(playerListener) }
-    private val httpClient = OkHttpClient()
-    private val cacheLock = Any()
-    private val audioCache = object : LruCache<Int, ByteArray>(MAX_AUDIO_CACHE_BYTES) {
-        override fun sizeOf(key: Int, value: ByteArray): Int = value.size
+    private var mediaController: MediaController? = null
+    private val controllerListener = ControllerListener()
 
-        override fun entryRemoved(evicted: Boolean, key: Int, oldValue: ByteArray, newValue: ByteArray?) {
-            if (evicted) {
-                _preloadedParagraphs.update { it - key }
-            }
-        }
-    }
+    private val httpClient = OkHttpClient()
     private val preloadingIndices = mutableSetOf<Int>()
     private var preloadJob: Job? = null
+
 
     // ==================== 涔︾睄鐩稿叧鐘舵€?====================
 
@@ -220,27 +205,39 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             }
             _isInitialized.value = true
         }
+
+        // Connect to MediaSession
+        viewModelScope.launch {
+            val sessionToken = SessionToken(appContext, ComponentName(appContext, ReadAudioService::class.java))
+            val controllerFuture = MediaController.Builder(appContext, sessionToken).buildAsync()
+            controllerFuture.addListener({
+                mediaController = controllerFuture.get()
+                mediaController?.addListener(controllerListener)
+                appendLog("MediaController connected. Is playing: ${mediaController?.isPlaying}")
+                _isPlaying.value = mediaController?.isPlaying == true
+            }, MoreExecutors.directExecutor())
+        }
     }
 
-    // ==================== Player Listener ====================
+    // ==================== Controller Listener ====================
 
-    private inner class AppPlayerListener : Player.Listener {
+    private inner class ControllerListener : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             _isPlaying.value = isPlaying
-            appendLog("TTS player isPlaying=$isPlaying state=${player.playbackState} " +
-                        "playWhenReady=${player.playWhenReady} keepPlaying=${_keepPlaying.value}")
+            appendLog("TTS controller isPlaying=$isPlaying playbackState=${mediaController?.playbackState} " +
+                        "playWhenReady=${mediaController?.playWhenReady} keepPlaying=${_keepPlaying.value}")
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
-            appendLog("TTS playback state=$playbackState playWhenReady=${player.playWhenReady} " +
-                        "isPlaying=${player.isPlaying}")
+            appendLog("TTS controller playbackState=$playbackState playWhenReady=${mediaController?.playWhenReady} " +
+                        "isPlaying=${mediaController?.isPlaying}")
             if (playbackState == Player.STATE_ENDED && _keepPlaying.value) {
                 playNextSeamlessly()
             }
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            appendLog("TTS player error: ${error.errorCodeName} ${error.message}")
+            appendLog("TTS controller error: ${error.errorCodeName} ${error.message}")
             _errorMessage.value = "鎾斁澶辫触: ${error.errorCodeName}"
             if (_keepPlaying.value) {
                 viewModelScope.launch {
@@ -255,14 +252,15 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
 
     fun togglePlayPause() {
         if (_selectedBook.value == null) return
-        appendLog("TTS toggle: isPlaying=${player.isPlaying} keepPlaying=${_keepPlaying.value}")
+        val currentMediaController = mediaController ?: return
+        appendLog("TTS toggle: isPlaying=${currentMediaController.isPlaying} keepPlaying=${_keepPlaying.value}")
 
-        if (player.isPlaying) {
+        if (currentMediaController.isPlaying) {
             _keepPlaying.value = false
             pausePlayback("toggle")
         } else if (_currentParagraphIndex.value >= 0) {
             _keepPlaying.value = true
-            player.play()
+            currentMediaController.play()
         } else {
             startPlayback()
         }
@@ -287,7 +285,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
                 _currentParagraphIndex.value = 0
             }
 
-            ReadAudioService.startService(appContext)
+            ReadAudioService.startService(appContext) // Ensure service is running
             speakParagraph(_currentParagraphIndex.value)
             observeProgress()
         }
@@ -308,32 +306,30 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
-            val cachedAudio = getCachedAudio(index)
-            val audioData = if (cachedAudio != null) {
-                cachedAudio
-            } else {
-                val sentence = currentSentences.getOrNull(index)
-                val audioUrl = sentence?.let { buildTtsAudioUrl(it, false) }
+            val sentence = currentSentences.getOrNull(index) ?: return@launch
+            val audioCacheKey = generateAudioCacheKey(index)
+
+            val audioData = AudioCache.get(audioCacheKey) ?: run {
+                val audioUrl = buildTtsAudioUrl(sentence, false)
 
                 if (audioUrl == null) {
-                    _errorMessage.value = "鏃犳硶鐢熸垚TTS閾炬帴锛岃妫€鏌TS璁剧疆"
+                    _errorMessage.value = "鏃犳硫鐢熸垚TTS閾炬帴锛岃妫€鏌TS璁剧疆"
                     stopPlayback("error")
                     return@launch
                 }
 
                 val data = fetchAudioBytes(audioUrl)
                 if (data == null) {
-                    _errorMessage.value = "TTS闊抽涓嬭浇澶辫触"
+                    _errorMessage.value = "TTS闊抽涓嬭В澶辫触"
                     stopPlayback("error")
                     return@launch
                 }
-
-                cacheAudio(index, data)
+                AudioCache.put(audioCacheKey, data)
                 _preloadedParagraphs.update { it + index }
                 data
             }
 
-            playFromMemory(index, audioData)
+            playFromService(audioCacheKey)
             preloadNextParagraphs()
         }
     }
@@ -350,7 +346,8 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             _preloadedParagraphs.update { it.intersect(validIndices) }
 
             for (i in startIndex until endIndex) {
-                if (getCachedAudio(i) != null) {
+                val audioCacheKey = generateAudioCacheKey(i)
+                if (AudioCache.get(audioCacheKey) != null) {
                     _preloadedParagraphs.update { it + i }
                     continue
                 }
@@ -370,7 +367,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
 
                 val data = fetchAudioBytes(audioUrlToPreload)
                 if (data != null) {
-                    cacheAudio(i, data)
+                    AudioCache.put(audioCacheKey, data)
                     _preloadedParagraphs.update { it + i }
                     appendLog("Preloaded paragraph $i successfully.")
                 } else {
@@ -381,20 +378,12 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun getCachedAudio(index: Int): ByteArray? = synchronized(cacheLock) {
-        audioCache.get(index)
-    }
-
-    private fun cacheAudio(index: Int, data: ByteArray) {
-        synchronized(cacheLock) {
-            audioCache.put(index, data)
-        }
+    private fun generateAudioCacheKey(index: Int): String {
+        return "${_selectedBook.value?.bookUrl}/${_currentChapterIndex.value}/$index"
     }
 
     private fun clearAudioCache() {
-        synchronized(cacheLock) {
-            audioCache.evictAll()
-        }
+        AudioCache.clear()
         _preloadedParagraphs.value = emptySet()
     }
 
@@ -433,18 +422,19 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun playFromMemory(index: Int, data: ByteArray) {
-        val dataSourceFactory = DataSource.Factory { ByteArrayDataSource(data) }
-        val mediaSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-            .createMediaSource(MediaItem.fromUri("memory://tts/$index"))
-        player.setMediaSource(mediaSource)
-        player.prepare()
-        player.play()
+    private fun playFromService(audioCacheKey: String) {
+        val currentMediaController = mediaController ?: return
+        val mediaItem = MediaItem.Builder()
+            .setMediaId(audioCacheKey)
+            .build()
+        currentMediaController.setMediaItem(mediaItem)
+        currentMediaController.prepare()
+        currentMediaController.play()
     }
 
     private fun pausePlayback(reason: String = "unspecified") {
         appendLog("TTS pause: reason=$reason")
-        player.pause()
+        mediaController?.pause()
     }
 
     private fun stopPlayback(reason: String = "unspecified") {
@@ -458,8 +448,8 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         _keepPlaying.value = false
-        player.stop()
-        player.clearMediaItems()
+        mediaController?.stop()
+        mediaController?.clearMediaItems()
         _currentParagraphIndex.value = -1
         isReadingChapterTitle = false
         _preloadedParagraphs.value = emptySet()
@@ -552,12 +542,13 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     private fun observeProgress() {
         viewModelScope.launch {
             while (_keepPlaying.value) {
-                if (!player.isPlaying) {
+                val currentMediaController = mediaController
+                if (currentMediaController == null || !currentMediaController.isPlaying) {
                     delay(500)
                     continue
                 }
-                val duration = player.duration.takeIf { it > 0 } ?: 1L
-                val position = player.currentPosition
+                val duration = currentMediaController.duration.takeIf { it > 0 } ?: 1L
+                val position = currentMediaController.currentPosition
                 _playbackProgress.value = (position.toFloat() / duration).coerceIn(0f, 1f)
                 _totalTime.value = formatTime(duration)
                 _currentTime.value = formatTime(position)
@@ -571,8 +562,8 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         super.onCleared()
         stopPlayback("cleared")
-        player.removeListener(playerListener)
-        PlayerPool.release()
+        mediaController?.removeListener(controllerListener)
+        mediaController?.release()
     }
 
     // =================================================================

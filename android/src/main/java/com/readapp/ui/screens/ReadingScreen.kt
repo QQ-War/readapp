@@ -29,6 +29,7 @@ import com.readapp.data.model.Chapter
 import com.readapp.ui.theme.AppDimens
 import com.readapp.ui.theme.customColors
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import com.readapp.data.ReadingMode
@@ -39,6 +40,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.foundation.layout.BoxWithConstraints
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ReadingScreen(
     book: Book,
@@ -320,7 +322,7 @@ fun ReadingScreen(
                 onFontSettings = { showFontDialog = true },
                 canGoPrevious = currentChapterIndex > 0,
                 canGoNext = currentChapterIndex < chapters.size - 1,
-                showTtsControls = currentPlayingParagraph >= 0  // 开始播放后显示TTS控制
+                showTtsControls = isPlaying  // 仅在实际播放/保持播放时显示 TTS 控制
             )
         }
 
@@ -423,7 +425,7 @@ private fun rememberPaginatedText(
                 )
             )
 
-            val endOffset = currentOffset + result.characterCount
+            val endOffset = currentOffset + result.lastVisibleOffset
             if (endOffset <= currentOffset) {
                 break
             }

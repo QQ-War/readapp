@@ -19,6 +19,8 @@ struct ReadingView: View {
     @State private var scrollProxy: ScrollViewProxy?
     @State private var lastTTSSentenceIndex: Int?
     @State private var showFontSettings = false
+    @State private var currentPageIndex: Int = 0
+    @State private var paginatedContent: [String] = []
     
     init(book: Book) {
         self.book = book
@@ -33,56 +35,67 @@ struct ReadingView: View {
                 .ignoresSafeArea()
             
             VStack(spacing: 0) {
-                // 内容区域
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
-                            if showUIControls {
-                                if currentChapterIndex < chapters.count {
-                                    Text(chapters[currentChapterIndex].title)
-                                        .font(.title2)
-                                        .fontWeight(.bold)
-                                        .padding(.bottom, 8)
-                                }
-                            }
-                            
-                            if !contentSentences.isEmpty && ttsManager.isPlaying {
-                                // TTS播放模式
-                                VStack(alignment: .leading, spacing: preferences.fontSize * 0.8) {
-                                    ForEach(Array(contentSentences.enumerated()), id: \.offset) { index, sentence in
-                                        Text("　　" + sentence.trimmingCharacters(in: .whitespacesAndNewlines))
+                if preferences.readingMode == .horizontal && !ttsManager.isPlaying {
+                    GeometryReader { geometry in
+                        TabView(selection: $currentPageIndex) {
+                            ForEach(Array(paginatedContent.enumerated()), id: \.offset) { index, pageText in
+                                ScrollView {
+                                    VStack(alignment: .leading, spacing: 16) {
+                                        if showUIControls {
+                                            if currentChapterIndex < chapters.count {
+                                                Text(chapters[currentChapterIndex].title)
+                                                    .font(.title2)
+                                                    .fontWeight(.bold)
+                                                    .padding(.bottom, 8)
+                                            }
+                                        }
+                                        Text(pageText)
                                             .font(.system(size: preferences.fontSize))
                                             .lineSpacing(preferences.lineSpacing)
                                             .frame(maxWidth: .infinity, alignment: .leading)
-                                            .fixedSize(horizontal: false, vertical: true)
-                                            .padding(.vertical, 6)
-                                            .padding(.horizontal, 8)
-                                            .background(
-                                                RoundedRectangle(cornerRadius: 4)
-                                                    .fill(
-                                                        index == ttsManager.currentSentenceIndex
-                                                            ? Color.blue.opacity(0.25)
-                                                            : (ttsManager.preloadedIndices.contains(index) && index > ttsManager.currentSentenceIndex)
-                                                                ? Color.green.opacity(0.15)
-                                                                : Color.clear
-                                                    )
-                                                    .animation(.easeInOut(duration: 0.3), value: ttsManager.currentSentenceIndex)
-                                            )
-                                            .id(index)
                                     }
+                                    .padding()
                                 }
-                            } else {
-                                // 普通阅读模式
-                                RichTextView(
-                                    sentences: contentSentences,
-                                    fontSize: preferences.fontSize,
-                                    lineSpacing: preferences.lineSpacing,
-                                    highlightIndex: lastTTSSentenceIndex,
-                                    scrollProxy: scrollProxy
-                                )
+                                .tag(index)
                             }
                         }
-                        .padding()
+                        .tabViewStyle(PageTabViewStyle())
+                        .onAppear {
+                            paginatedContent = TextPaginator.paginate(
+                                contentSentences,
+                                in: geometry.size,
+                                fontSize: preferences.fontSize,
+                                lineSpacing: preferences.lineSpacing
+                            )
+                            currentPageIndex = 0
+                        }
+                        .onChange(of: contentSentences) { _ in
+                            paginatedContent = TextPaginator.paginate(
+                                contentSentences,
+                                in: geometry.size,
+                                fontSize: preferences.fontSize,
+                                lineSpacing: preferences.lineSpacing
+                            )
+                            currentPageIndex = 0
+                        }
+                        .onChange(of: preferences.fontSize) { _ in
+                            paginatedContent = TextPaginator.paginate(
+                                contentSentences,
+                                in: geometry.size,
+                                fontSize: preferences.fontSize,
+                                lineSpacing: preferences.lineSpacing
+                            )
+                            currentPageIndex = 0
+                        }
+                        .onChange(of: preferences.lineSpacing) { _ in
+                            paginatedContent = TextPaginator.paginate(
+                                contentSentences,
+                                in: geometry.size,
+                                fontSize: preferences.fontSize,
+                                lineSpacing: preferences.lineSpacing
+                            )
+                            currentPageIndex = 0
+                        }
                     }
                     .contentShape(Rectangle())
                     .onTapGesture {
@@ -90,15 +103,74 @@ struct ReadingView: View {
                             showUIControls.toggle()
                         }
                     }
-                    .onChange(of: ttsManager.currentSentenceIndex) { newIndex in
-                        if ttsManager.isPlaying && !contentSentences.isEmpty {
-                            withAnimation {
-                                proxy.scrollTo(newIndex, anchor: .center)
+                } else {
+                    // 内容区域
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 16) {
+                                if showUIControls {
+                                    if currentChapterIndex < chapters.count {
+                                        Text(chapters[currentChapterIndex].title)
+                                            .font(.title2)
+                                            .fontWeight(.bold)
+                                            .padding(.bottom, 8)
+                                    }
+                                }
+                                
+                                if !contentSentences.isEmpty && ttsManager.isPlaying {
+                                    // TTS播放模式
+                                    VStack(alignment: .leading, spacing: preferences.fontSize * 0.8) {
+                                        ForEach(Array(contentSentences.enumerated()), id: \.offset) { index, sentence in
+                                            Text("　　" + sentence.trimmingCharacters(in: .whitespacesAndNewlines))
+                                                .font(.system(size: preferences.fontSize))
+                                                .lineSpacing(preferences.lineSpacing)
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                                .fixedSize(horizontal: false, vertical: true)
+                                                .padding(.vertical, 6)
+                                                .padding(.horizontal, 8)
+                                                .background(
+                                                    RoundedRectangle(cornerRadius: 4)
+                                                        .fill(
+                                                            index == ttsManager.currentSentenceIndex
+                                                                ? Color.blue.opacity(0.25)
+                                                                : (ttsManager.preloadedIndices.contains(index) && index > ttsManager.currentSentenceIndex)
+                                                                    ? Color.green.opacity(0.15)
+                                                                    : Color.clear
+                                                        )
+                                                        .animation(.easeInOut(duration: 0.3), value: ttsManager.currentSentenceIndex)
+                                                )
+                                                .id(index)
+                                        }
+                                    }
+                                } else {
+                                    // 普通阅读模式
+                                    RichTextView(
+                                        sentences: contentSentences,
+                                        fontSize: preferences.fontSize,
+                                        lineSpacing: preferences.lineSpacing,
+                                        highlightIndex: lastTTSSentenceIndex,
+                                        scrollProxy: scrollProxy
+                                    )
+                                }
+                            }
+                            .padding()
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                showUIControls.toggle()
                             }
                         }
-                    }
-                    .onAppear {
-                        scrollProxy = proxy
+                        .onChange(of: ttsManager.currentSentenceIndex) { newIndex in
+                            if ttsManager.isPlaying && !contentSentences.isEmpty {
+                                withAnimation {
+                                    proxy.scrollTo(newIndex, anchor: .center)
+                                }
+                            }
+                        }
+                        .onAppear {
+                            scrollProxy = proxy
+                        }
                     }
                 }
                 
@@ -344,6 +416,57 @@ struct ReadingView: View {
                 print("保存进度失败: \(error)")
             }
         }
+    }
+}
+
+// MARK: - Text Paginator
+struct TextPaginator {
+    static func paginate(
+        _ sentences: [String],
+        in size: CGSize,
+        fontSize: CGFloat,
+        lineSpacing: CGFloat
+    ) -> [String] {
+        guard !sentences.isEmpty, size.width > 0, size.height > 0 else { return [] }
+
+        let font = UIFont.systemFont(ofSize: fontSize)
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineSpacing = lineSpacing
+
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .paragraphStyle: paragraphStyle
+        ]
+
+        var pages: [String] = []
+        var currentPageText = ""
+
+        for sentence in sentences {
+            let sentenceWithIndent = "    " + sentence.trimmingCharacters(in: .whitespacesAndNewlines) + "\n\n"
+            let prospectiveText = currentPageText + sentenceWithIndent
+
+            let prospectiveHeight = prospectiveText.boundingRect(
+                with: CGSize(width: size.width, height: .greatestFiniteMagnitude),
+                options: .usesLineFragmentOrigin,
+                attributes: attributes,
+                context: nil
+            ).height
+
+            if prospectiveHeight > size.height {
+                if !currentPageText.isEmpty {
+                    pages.append(currentPageText)
+                }
+                currentPageText = sentenceWithIndent
+            } else {
+                currentPageText = prospectiveText
+            }
+        }
+
+        if !currentPageText.isEmpty {
+            pages.append(currentPageText)
+        }
+
+        return pages
     }
 }
 
