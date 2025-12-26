@@ -79,7 +79,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     private val preloadingIndices = mutableSetOf<Int>()
     private var preloadJob: Job? = null
 
-    // ==================== 书籍相关状态 ====================
+    // ==================== 书籍相关状�?====================
 
     private var currentSentences: List<String> = emptyList()
     private var currentParagraphs: List<String> = emptyList()
@@ -107,7 +107,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     val currentChapterTitle: String
         get() = _chapters.value.getOrNull(_currentChapterIndex.value)?.title ?: ""
 
-    // ==================== 段落相关状态 ====================
+    // ==================== 段落相关状�?====================
 
     private val _currentParagraphIndex = MutableStateFlow(-1)
     val currentParagraphIndex: StateFlow<Int> = _currentParagraphIndex.asStateFlow()
@@ -120,7 +120,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     private val _preloadedChapters = MutableStateFlow<Set<Int>>(emptySet())
     val preloadedChapters: StateFlow<Set<Int>> = _preloadedChapters.asStateFlow()
 
-    // ==================== TTS 播放状态 ====================
+    // ==================== TTS 播放状�?====================
 
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
@@ -138,7 +138,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     private val _playbackProgress = MutableStateFlow(0f)
     val playbackProgress: StateFlow<Float> = _playbackProgress.asStateFlow()
 
-    // ==================== 净化规则状态 ====================
+    // ==================== 净化规则状�?====================
 
     private val _replaceRules = MutableStateFlow<List<ReplaceRule>>(emptyList())
     val replaceRules: StateFlow<List<ReplaceRule>> = _replaceRules.asStateFlow()
@@ -186,7 +186,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearError() { _errorMessage.value = null }
 
-    // ==================== 初始化 ====================
+    // ==================== 初始�?====================
 
     init {
         viewModelScope.launch {
@@ -272,7 +272,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             _isChapterContentLoading.value = false
 
             if (content.isNullOrBlank()) {
-                _errorMessage.value = "当前章节内容为空，无法开始朗读"
+                _errorMessage.value = "当前章节内容为空，无法开始朗�?
                 return@launch
             }
 
@@ -463,7 +463,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         resetPlayback()
     }
 
-    // ==================== 净化规则状态 ====================
+    // ==================== 净化规则状�?====================
 
     fun loadReplaceRules() {
         viewModelScope.launch {
@@ -474,7 +474,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             ).onSuccess {
                 _replaceRules.value = it
             }.onFailure {
-                _errorMessage.value = "加载净化规则失败: ${it.message}"
+                _errorMessage.value = "加载净化规则失�? ${it.message}"
             }
         }
     }
@@ -522,7 +522,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
                 _replaceRules.value = updatedRules
                 loadReplaceRules()
             }.onFailure {
-                _errorMessage.value = "切换规则状态失败: ${it.message}"
+                _errorMessage.value = "切换规则状态失�? ${it.message}"
             }
         }
     }
@@ -756,7 +756,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             }
         chaptersResult.onSuccess { chapterList ->
             _chapters.value = chapterList
-            appendLog("章节列表加载成功: ${chapterList.size} 章")
+            appendLog("章节列表加载成功: ${chapterList.size} �?)
             if (chapterList.isNotEmpty()) {
                 val index = _currentChapterIndex.value.coerceIn(0, chapterList.lastIndex)
                 _currentChapterIndex.value = index
@@ -789,7 +789,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             return _currentChapterContent.value.ifBlank { null }
         }
         _isChapterContentLoading.value = true
-        appendLog("开始请求章节内容: index=$index url=${chapter.url}")
+        appendLog("开始请求章节内�? index=$index url=${chapter.url}")
         return try {
             val result = repository.fetchChapterContent(currentServerEndpoint(), _publicServerAddress.value.ifBlank { null }, _accessToken.value, bookUrl, book.origin, chapter.index)
             result.onSuccess { content ->
@@ -800,7 +800,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
                     content.orEmpty().isNotBlank() -> content.orEmpty().trim()
                     else -> "章节内容为空"
                 }
-                appendLog("章节内容清洗后: index=$index length=${resolved.length}")
+                appendLog("章节内容清洗�? index=$index length=${resolved.length}")
                 updateChapterContent(index, resolved)
             }.onFailure { error ->
                 _errorMessage.value = "加载失败: ${error.message}".trim()
@@ -829,11 +829,11 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         if (raw.isBlank()) return ""
 
         var content = raw
-        _replaceRules.value.filter { it.isEnabled }.sortedBy { it.order }.forEach { rule ->
+        _replaceRules.value.filter { it.isEnabled }.sortedBy { it.ruleOrder }.forEach { rule ->
             try {
                 content = content.replace(Regex(rule.pattern), rule.replacement)
             } catch (e: Exception) {
-                Log.w(TAG, "净化规则执行失败: ${rule.name}", e)
+                Log.w(TAG, "净化规则执行失�? ${rule.name}", e)
             }
         }
 
@@ -905,7 +905,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         }.map { it.second } else filtered
         _books.value = sorted
     }
-    private fun isPunctuationOnly(sentence: String): Boolean = sentence.trim().all { it in "，。！？；、“”\"'…—-· " }
+    private fun isPunctuationOnly(sentence: String): Boolean = sentence.trim().all { it in "，。！？；、“”\"'…�?· " }
     private fun parseSpeakerMapping(raw: String): Map<String, String> { if (raw.isBlank()) return emptyMap(); return runCatching { val obj = JSONObject(raw); obj.keys().asSequence().associateWith { key -> obj.optString(key) } }.getOrDefault(emptyMap()) }
     private fun serializeSpeakerMapping(mapping: Map<String, String>): String { val obj = JSONObject(); mapping.forEach { (key, value) -> obj.put(key, value) }; return obj.toString() }
     fun exportLogs(context: android.content.Context): android.net.Uri? { if (!logFile.exists()) return null; return runCatching { val exportFile = File(context.cacheDir, LOG_EXPORT_NAME); logFile.copyTo(exportFile, overwrite = true); androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", exportFile) }.getOrNull() }
@@ -939,3 +939,4 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 }
+
