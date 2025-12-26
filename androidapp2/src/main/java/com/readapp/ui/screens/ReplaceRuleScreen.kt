@@ -169,7 +169,7 @@ fun ReplaceRuleEditDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(rule == null ? "添加净化规则" : "编辑净化规则") },
+        title = { Text(if (rule == null) "添加净化规则" else "编辑净化规则") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(AppDimens.PaddingSmall)) {
                 OutlinedTextField(
