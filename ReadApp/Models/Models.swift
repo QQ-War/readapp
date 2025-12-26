@@ -75,9 +75,31 @@ struct ChapterContentResponse: Codable {
     let text: String
 }
 
-struct ReplaceRule: Codable {
+// MARK: - Replace Rule Model
+struct ReplaceRule: Codable, Identifiable {
+    private let fallbackId = UUID()
+    
     let id: String?
-    let name: String?
+    let name: String
+    let pattern: String
+    let replacement: String
+    let scope: String?
+    let ruleorder: Int
+    let isEnabled: Bool
+
+    var identifiableId: UUID {
+        fallbackId
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case pattern
+        case replacement
+        case scope
+        case ruleorder = "order" // 服务端字段是 order，这里映射一下
+        case isEnabled
+    }
 }
 
 // MARK: - Book Import Response

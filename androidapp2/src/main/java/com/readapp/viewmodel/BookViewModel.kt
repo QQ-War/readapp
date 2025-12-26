@@ -31,14 +31,21 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.concurrent.ConcurrentHashMap
 
+import android.util.LruCache
+import androidx.media3.datasource.ByteArrayDataSource
+import androidx.media3.datasource.DataSource
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import com.readapp.data.model.ReplaceRule
+import okhttp3.OkHttpClient
+import okhttp3.Request
 class BookViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
         private const val TAG = "BookViewModel"
         private const val LOG_FILE_NAME = "reader_logs.txt"
         private const val LOG_EXPORT_NAME = "reader_logs_export.txt"
+        private const val MAX_AUDIO_CACHE_BYTES = 20 * 1024 * 1024
 
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
@@ -56,14 +63,26 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         ReadApiService.create(endpoint) { accessToken.value }
     }
 
-    private var currentPlayer: ExoPlayer? = null
-    private val preloadedPlayers = ConcurrentHashMap<Int, ExoPlayer>()
     private val playerListener = AppPlayerListener()
+    private val player: ExoPlayer = PlayerPool.get(appContext).apply { addListener(playerListener) }
+    private val httpClient = OkHttpClient()
+    private val cacheLock = Any()
+    private val audioCache = object : LruCache<Int, ByteArray>(MAX_AUDIO_CACHE_BYTES) {
+        override fun sizeOf(key: Int, value: ByteArray): Int = value.size
+
+        override fun entryRemoved(evicted: Boolean, key: Int, oldValue: ByteArray, newValue: ByteArray?) {
+            if (evicted) {
+                _preloadedParagraphs.update { it - key }
+            }
+        }
+    }
+    private val preloadingIndices = mutableSetOf<Int>()
     private var preloadJob: Job? = null
 
     // ==================== 书籍相关状态 ====================
 
     private var currentSentences: List<String> = emptyList()
+    private var currentParagraphs: List<String> = emptyList()
     private var isReadingChapterTitle = false
     private var currentSearchQuery = ""
     private var allBooks: List<Book> = emptyList()
@@ -119,6 +138,11 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     private val _playbackProgress = MutableStateFlow(0f)
     val playbackProgress: StateFlow<Float> = _playbackProgress.asStateFlow()
 
+    // ==================== 净化规则状态 ====================
+
+    private val _replaceRules = MutableStateFlow<List<ReplaceRule>>(emptyList())
+    val replaceRules: StateFlow<List<ReplaceRule>> = _replaceRules.asStateFlow()
+
     // ==================== TTS 设置 & 其他 ====================
     // (No changes in this section, keeping it compact)
     private val _selectedTtsEngine = MutableStateFlow("")
@@ -165,7 +189,6 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     // ==================== 初始化 ====================
 
     init {
-        PlayerPool.initialize(appContext)
         viewModelScope.launch {
             // Load all preferences
             _serverAddress.value = preferences.serverUrl.first()
@@ -187,6 +210,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
                 try {
                     loadTtsEnginesInternal()
                     refreshBooksInternal(showLoading = true)
+                    loadReplaceRules()
                 } finally {
                     _isLoading.value = false
                 }
@@ -200,27 +224,24 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     private inner class AppPlayerListener : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             _isPlaying.value = isPlaying
-            appendLog("TTS player isPlaying=$isPlaying state=${currentPlayer?.playbackState} " +
-                        "playWhenReady=${currentPlayer?.playWhenReady} keepPlaying=${_keepPlaying.value}")
+            appendLog("TTS player isPlaying=$isPlaying state=${player.playbackState} " +
+                        "playWhenReady=${player.playWhenReady} keepPlaying=${_keepPlaying.value}")
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
-            appendLog("TTS playback state=$playbackState playWhenReady=${currentPlayer?.playWhenReady} " +
-                        "isPlaying=${currentPlayer?.isPlaying}")
-            if (playbackState == Player.STATE_ENDED) {
-                if (_keepPlaying.value) {
-                    playNextSeamlessly()
-                }
+            appendLog("TTS playback state=$playbackState playWhenReady=${player.playWhenReady} " +
+                        "isPlaying=${player.isPlaying}")
+            if (playbackState == Player.STATE_ENDED && _keepPlaying.value) {
+                playNextSeamlessly()
             }
         }
 
         override fun onPlayerError(error: PlaybackException) {
             appendLog("TTS player error: ${error.errorCodeName} ${error.message}")
             _errorMessage.value = "播放失败: ${error.errorCodeName}"
-            // Simple retry logic: move to the next paragraph
             if (_keepPlaying.value) {
                 viewModelScope.launch {
-                    delay(500) // Avoid rapid-fire retries
+                    delay(500)
                     playNextSeamlessly()
                 }
             }
@@ -231,14 +252,14 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
 
     fun togglePlayPause() {
         if (_selectedBook.value == null) return
-        appendLog("TTS toggle: isPlaying=${currentPlayer?.isPlaying} keepPlaying=${_keepPlaying.value}")
+        appendLog("TTS toggle: isPlaying=${player.isPlaying} keepPlaying=${_keepPlaying.value}")
 
-        if (currentPlayer?.isPlaying == true) {
+        if (player.isPlaying) {
             _keepPlaying.value = false
             pausePlayback("toggle")
         } else if (_currentParagraphIndex.value >= 0) {
             _keepPlaying.value = true
-            currentPlayer?.play()
+            player.play()
         } else {
             startPlayback()
         }
@@ -257,6 +278,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
 
             _keepPlaying.value = true
             currentSentences = parseParagraphs(content)
+            currentParagraphs = currentSentences
             _totalParagraphs.value = currentSentences.size.coerceAtLeast(1)
             if (_currentParagraphIndex.value < 0) {
                 _currentParagraphIndex.value = 0
@@ -270,14 +292,6 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun playNextSeamlessly() {
         val nextIndex = _currentParagraphIndex.value + 1
-        
-        // Release the player that just finished
-        currentPlayer?.let {
-            it.removeListener(playerListener)
-            PlayerPool.release(it)
-        }
-        currentPlayer = null
-
         speakParagraph(nextIndex)
     }
 
@@ -291,24 +305,10 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
-            // Check if a player is already preloaded for this index
-            val preloadedPlayer = preloadedPlayers.remove(index)
-            if (preloadedPlayer != null) {
-                appendLog("speakParagraph: Found preloaded player for index $index. Playing immediately.")
-                currentPlayer = preloadedPlayer
-                currentPlayer?.addListener(playerListener)
-                currentPlayer?.play()
+            val cachedAudio = getCachedAudio(index)
+            val audioData = if (cachedAudio != null) {
+                cachedAudio
             } else {
-                appendLog("speakParagraph: No preloaded player for index $index. Loading on-demand.")
-                // On-demand loading
-                currentPlayer = currentPlayer ?: PlayerPool.acquire()
-                if (currentPlayer == null) {
-                    _errorMessage.value = "无可用播放器"
-                    stopPlayback("error")
-                    return@launch
-                }
-                currentPlayer?.addListener(playerListener)
-                
                 val sentence = currentSentences.getOrNull(index)
                 val audioUrl = sentence?.let { buildTtsAudioUrl(it, false) }
 
@@ -317,110 +317,229 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
                     stopPlayback("error")
                     return@launch
                 }
-                
-                val mediaItem = MediaItem.fromUri(audioUrl)
-                currentPlayer?.setMediaItem(mediaItem)
-                currentPlayer?.prepare()
-                currentPlayer?.play()
+
+                val data = fetchAudioBytes(audioUrl)
+                if (data == null) {
+                    _errorMessage.value = "TTS音频下载失败"
+                    stopPlayback("error")
+                    return@launch
+                }
+
+                cacheAudio(index, data)
+                _preloadedParagraphs.update { it + index }
+                data
             }
-            
-            // Trigger preloading for subsequent paragraphs
+
+            playFromMemory(index, audioData)
             preloadNextParagraphs()
         }
     }
 
     private fun preloadNextParagraphs() {
-        preloadJob?.cancel() // Cancel any ongoing preload job
+        preloadJob?.cancel()
         preloadJob = viewModelScope.launch(Dispatchers.IO) {
             val preloadCount = _preloadCount.value
             if (preloadCount <= 0) return@launch
 
             val startIndex = _currentParagraphIndex.value + 1
             val endIndex = (startIndex + preloadCount).coerceAtMost(currentSentences.size)
-
-            // Clean up stale preloaded players that are no longer in the upcoming queue
             val validIndices = (startIndex until endIndex).toSet()
-            preloadedPlayers.keys.retainAll { it in validIndices }
-            
+            _preloadedParagraphs.update { it.intersect(validIndices) }
+
             for (i in startIndex until endIndex) {
-                if (preloadedPlayers.containsKey(i)) continue // Already preloading/preloaded
+                if (getCachedAudio(i) != null) {
+                    _preloadedParagraphs.update { it + i }
+                    continue
+                }
+                if (!markPreloading(i)) continue
 
-                val sentenceToPreload = currentSentences.getOrNull(i) ?: continue
-                if (sentenceToPreload.isBlank() || isPunctuationOnly(sentenceToPreload)) continue
-
-                val audioUrlToPreload = buildTtsAudioUrl(sentenceToPreload, isChapterTitle = false) ?: continue
-                
-                val preloader = PlayerPool.acquire()
-                if (preloader == null) {
-                    appendLog("Preload failed for index $i: No available players in pool.")
-                    break // Stop preloading if pool is exhausted
+                val sentenceToPreload = currentSentences.getOrNull(i)
+                if (sentenceToPreload.isNullOrBlank() || isPunctuationOnly(sentenceToPreload)) {
+                    unmarkPreloading(i)
+                    continue
                 }
 
-                preloadedPlayers[i] = preloader
-                appendLog("Preloading paragraph $i...")
+                val audioUrlToPreload = buildTtsAudioUrl(sentenceToPreload, isChapterTitle = false)
+                if (audioUrlToPreload.isNullOrBlank()) {
+                    unmarkPreloading(i)
+                    continue
+                }
 
-                preloader.addListener(object : Player.Listener {
-                    override fun onPlaybackStateChanged(playbackState: Int) {
-                        if (playbackState == Player.STATE_READY) {
-                            _preloadedParagraphs.update { it + i }
-                            appendLog("Preloaded paragraph $i successfully.")
-                            preloader.removeListener(this) // One-shot listener
-                        }
-                    }
-                    override fun onPlayerError(error: PlaybackException) {
-                        appendLog("Failed to preload paragraph $i: ${error.message}")
-                        preloadedPlayers.remove(i)?.let { PlayerPool.release(it) }
-                        preloader.removeListener(this)
-                    }
-                })
-
-                val mediaItem = MediaItem.fromUri(audioUrlToPreload)
-                preloader.setMediaItem(mediaItem)
-                preloader.prepare()
+                val data = fetchAudioBytes(audioUrlToPreload)
+                if (data != null) {
+                    cacheAudio(i, data)
+                    _preloadedParagraphs.update { it + i }
+                    appendLog("Preloaded paragraph $i successfully.")
+                } else {
+                    appendLog("Failed to preload paragraph $i: download failed")
+                }
+                unmarkPreloading(i)
             }
         }
     }
 
+    private fun getCachedAudio(index: Int): ByteArray? = synchronized(cacheLock) {
+        audioCache.get(index)
+    }
+
+    private fun cacheAudio(index: Int, data: ByteArray) {
+        synchronized(cacheLock) {
+            audioCache.put(index, data)
+        }
+    }
+
+    private fun clearAudioCache() {
+        synchronized(cacheLock) {
+            audioCache.evictAll()
+        }
+        _preloadedParagraphs.value = emptySet()
+    }
+
+    private fun markPreloading(index: Int): Boolean = synchronized(preloadingIndices) {
+        preloadingIndices.add(index)
+    }
+
+    private fun unmarkPreloading(index: Int) {
+        synchronized(preloadingIndices) {
+            preloadingIndices.remove(index)
+        }
+    }
+
+    private fun clearPreloadingIndices() {
+        synchronized(preloadingIndices) {
+            preloadingIndices.clear()
+        }
+    }
+
+    private suspend fun fetchAudioBytes(url: String): ByteArray? {
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val request = Request.Builder().url(url).build()
+                httpClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        appendLog("TTS download failed: http=${response.code}")
+                        return@withContext null
+                    }
+                    val body = response.body ?: return@withContext null
+                    body.bytes().takeIf { it.isNotEmpty() }
+                }
+            }.getOrElse { error ->
+                appendLog("TTS download failed: ${error.message}")
+                null
+            }
+        }
+    }
+
+    private fun playFromMemory(index: Int, data: ByteArray) {
+        val dataSourceFactory = DataSource.Factory { ByteArrayDataSource(data) }
+        val mediaSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+            .createMediaSource(MediaItem.fromUri("memory://tts/$index"))
+        player.setMediaSource(mediaSource)
+        player.prepare()
+        player.play()
+    }
+
     private fun pausePlayback(reason: String = "unspecified") {
         appendLog("TTS pause: reason=$reason")
-        currentPlayer?.pause()
+        player.pause()
     }
 
     private fun stopPlayback(reason: String = "unspecified") {
         appendLog("TTS stop: reason=$reason")
         preloadJob?.cancel()
+        clearAudioCache()
+        clearPreloadingIndices()
 
         if (reason != "finished") {
             saveBookProgress()
         }
 
-        currentPlayer?.let {
-            it.removeListener(playerListener)
-            PlayerPool.release(it)
-        }
-        currentPlayer = null
-
-        preloadedPlayers.values.forEach { PlayerPool.release(it) }
-        preloadedPlayers.clear()
-
         _keepPlaying.value = false
+        player.stop()
+        player.clearMediaItems()
         _currentParagraphIndex.value = -1
         isReadingChapterTitle = false
         _preloadedParagraphs.value = emptySet()
         resetPlayback()
     }
 
+    // ==================== 净化规则状态 ====================
+
+    fun loadReplaceRules() {
+        viewModelScope.launch {
+            repository.fetchReplaceRules(
+                currentServerEndpoint(),
+                _publicServerAddress.value.ifBlank { null },
+                _accessToken.value
+            ).onSuccess {
+                _replaceRules.value = it
+            }.onFailure {
+                _errorMessage.value = "加载净化规则失败: ${it.message}"
+            }
+        }
+    }
+
+    fun addReplaceRule(rule: ReplaceRule) {
+        viewModelScope.launch {
+            repository.addReplaceRule(
+                currentServerEndpoint(),
+                _publicServerAddress.value.ifBlank { null },
+                _accessToken.value,
+                rule
+            ).onSuccess {
+                loadReplaceRules()
+            }.onFailure {
+                _errorMessage.value = "添加规则失败: ${it.message}"
+            }
+        }
+    }
+
+    fun deleteReplaceRule(id: Long) {
+        viewModelScope.launch {
+            repository.deleteReplaceRule(
+                currentServerEndpoint(),
+                _publicServerAddress.value.ifBlank { null },
+                _accessToken.value,
+                id
+            ).onSuccess {
+                loadReplaceRules()
+            }.onFailure {
+                _errorMessage.value = "删除规则失败: ${it.message}"
+            }
+        }
+    }
+
+    fun toggleReplaceRule(id: Long, isEnabled: Boolean) {
+        viewModelScope.launch {
+            repository.toggleReplaceRule(
+                currentServerEndpoint(),
+                _publicServerAddress.value.ifBlank { null },
+                _accessToken.value,
+                id,
+                isEnabled
+            ).onSuccess {
+                val updatedRules = _replaceRules.value.map { if (it.id == id) it.copy(isEnabled = isEnabled) else it }
+                _replaceRules.value = updatedRules
+                loadReplaceRules()
+            }.onFailure {
+                _errorMessage.value = "切换规则状态失败: ${it.message}"
+            }
+        }
+    }
+
     fun previousParagraph() {
-        if (_currentParagraphIndex.value > 0) {
-            stopPlayback("user_switch")
-            startPlayback() // Simplified: just restart from the new index
-            _currentParagraphIndex.value--
+        val target = _currentParagraphIndex.value - 1
+        if (target >= 0) {
+            _keepPlaying.value = true
+            speakParagraph(target)
         }
     }
 
     fun nextParagraph() {
-        if (_currentParagraphIndex.value < currentSentences.size - 1) {
-            playNextSeamlessly()
+        val target = _currentParagraphIndex.value + 1
+        if (target < currentSentences.size) {
+            _keepPlaying.value = true
+            speakParagraph(target)
         }
     }
 
@@ -430,8 +549,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     private fun observeProgress() {
         viewModelScope.launch {
             while (_keepPlaying.value) {
-                val player = currentPlayer
-                if (player == null || !player.isPlaying) {
+                if (!player.isPlaying) {
                     delay(500)
                     continue
                 }
@@ -450,7 +568,8 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         super.onCleared()
         stopPlayback("cleared")
-        PlayerPool.releaseAll()
+        player.removeListener(playerListener)
+        PlayerPool.release()
     }
 
     // =================================================================
@@ -512,6 +631,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
                 preferences.saveServerUrl(normalized)
                 loadTtsEnginesInternal()
                 refreshBooksInternal(showLoading = true)
+                loadReplaceRules()
                 onSuccess()
             }
             _isLoading.value = false
@@ -534,11 +654,14 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             currentSentences = emptyList()
             chapterContentCache.clear()
             stopPlayback("logout")
+            clearAudioCache()
+            clearPreloadingIndices()
             _availableTtsEngines.value = emptyList()
             _selectedTtsEngine.value = ""
             _narrationTtsEngine.value = ""
             _dialogueTtsEngine.value = ""
             _speakerTtsMapping.value = emptyMap()
+            _replaceRules.value = emptyList()
         }
     }
 
@@ -704,10 +827,28 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     private fun parseParagraphs(content: String): List<String> = content.split("\n").map { it.trim() }.filter { it.isNotBlank() }
     private fun cleanChapterContent(raw: String): String {
         if (raw.isBlank()) return ""
-        val withoutSvg = raw.replace("(?is)<svg.*?</svg>".toRegex(), "")
-        val withoutScripts = withoutSvg.replace("(?is)<script.*?</script>".toRegex(), "").replace("(?is)<style.*?</style>".toRegex(), "")
-        val withoutTags = withoutScripts.replace("(?is)<(?!img\\b)[^>]+>".toRegex(), "\n")
-        return withoutTags.replace("&nbsp;", " ").replace("&amp;", "&").lines().map { it.trim() }.filter { it.isNotBlank() }.joinToString("\n")
+
+        var content = raw
+        _replaceRules.value.filter { it.isEnabled }.sortedBy { it.order }.forEach { rule ->
+            try {
+                content = content.replace(Regex(rule.pattern), rule.replacement)
+            } catch (e: Exception) {
+                Log.w(TAG, "净化规则执行失败: ${rule.name}", e)
+            }
+        }
+
+        content = content.replace("(?is)<svg.*?</svg>".toRegex(), "")
+        content = content.replace("(?is)<script.*?</script>".toRegex(), "")
+        content = content.replace("(?is)<style.*?</style>".toRegex(), "")
+        content = content.replace("(?is)<(?!img\\b)[^>]+>".toRegex(), "\n")
+
+        return content
+            .replace("&nbsp;", " ")
+            .replace("&amp;", "&")
+            .lines()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .joinToString("\n")
     }
     private suspend fun loadTtsEnginesInternal() {
         if (_accessToken.value.isBlank()) return
@@ -746,28 +887,11 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     fun updateReadingFontSize(size: Float) { _readingFontSize.value = size.coerceIn(12f, 28f); viewModelScope.launch { preferences.saveReadingFontSize(_readingFontSize.value) } }
     fun updateLoggingEnabled(enabled: Boolean) { _loggingEnabled.value = enabled; viewModelScope.launch { preferences.saveLoggingEnabled(enabled) } }
     fun updateBookshelfSortByRecent(enabled: Boolean) { _bookshelfSortByRecent.value = enabled; viewModelScope.launch { preferences.saveBookshelfSortByRecent(enabled); applyBooksFilterAndSort() } }
-    fun clearCache() { viewModelScope.launch(Dispatchers.IO) { PlayerPool.getCache(appContext).release() } }
-    private fun currentServerEndpoint(): String { val normalized = _serverAddress.value.trim().trimEnd('/'); return if (normalized.contains("/api/")) normalized else "$normalized/api/5" }
-    private fun formatTime(millis: Long): String { val totalSeconds = millis / 1000; val minutes = totalSeconds / 60; val seconds = totalSeconds % 60; return String.format("%02d:%02d", minutes, seconds) }
-    private fun resolvedNarrationTtsId(): String = _narrationTtsEngine.value.ifBlank { _selectedTtsEngine.value }
-    private fun resolvedDialogueTtsId(): String = _dialogueTtsEngine.value.ifBlank { resolvedNarrationTtsId() }
-    private fun isDialogueSentence(sentence: String): Boolean = sentence.contains("“") || sentence.contains("\"")
-    private fun extractSpeaker(sentence: String): String? { val regex = "^\\s*([\\p{Han}A-Za-z0-9_·]{1,12})[\\s　]*[：:，,]?\\s*[\"“]".toRegex(); return regex.find(sentence)?.groups?.get(1)?.value?.trim() }
-    private fun resolveTtsIdForSentence(sentence: String, isChapterTitle: Boolean): String? {
-        if (isChapterTitle) return resolvedNarrationTtsId().ifBlank { _selectedTtsEngine.value }.ifBlank { null }
-        var targetId = resolvedNarrationTtsId()
-        if (isDialogueSentence(sentence)) {
-            val speaker = extractSpeaker(sentence)
-            if (speaker != null) {
-                val normalized = speaker.replace(" ", "")
-                val mapped = _speakerTtsMapping.value[speaker] ?: _speakerTtsMapping.value[normalized]
-                targetId = if (!mapped.isNullOrBlank()) mapped else resolvedDialogueTtsId()
-            } else {
-                targetId = resolvedDialogueTtsId()
-            }
+    fun clearCache() {
+        viewModelScope.launch {
+            clearAudioCache()
+            clearPreloadingIndices()
         }
-        if (targetId.isBlank()) targetId = _selectedTtsEngine.value
-        return targetId.ifBlank { null }
     }
     private fun buildTtsAudioUrl(sentence: String, isChapterTitle: Boolean): String? {
         val ttsId = resolveTtsIdForSentence(sentence, isChapterTitle) ?: return null

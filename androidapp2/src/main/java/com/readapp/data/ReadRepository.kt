@@ -1,15 +1,17 @@
 package com.readapp.data
 
+import android.content.Context
+import android.net.Uri
+import com.readapp.data.model.ApiResponse
 import com.readapp.data.model.Book
 import com.readapp.data.model.Chapter
 import com.readapp.data.model.HttpTTS
+import com.readapp.data.model.ReplaceRule
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import retrofit2.Response
-import android.content.Context
-import android.net.Uri
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import retrofit2.Response
 
 class ReadRepository(private val apiFactory: (String) -> ReadApiService) {
 
@@ -76,6 +78,20 @@ class ReadRepository(private val apiFactory: (String) -> ReadApiService) {
             it.importBook(accessToken, filePart)
         }(buildEndpoints(baseUrl, publicUrl))
     }
+    
+    // region Replace Rules
+    suspend fun fetchReplaceRules(baseUrl: String, publicUrl: String?, accessToken: String): Result<List<ReplaceRule>> =
+        executeWithFailover { it.getReplaceRules(accessToken) }(buildEndpoints(baseUrl, publicUrl))
+
+    suspend fun addReplaceRule(baseUrl: String, publicUrl: String?, accessToken: String, rule: ReplaceRule): Result<Any> =
+        executeWithFailover { it.addReplaceRule(accessToken, rule) }(buildEndpoints(baseUrl, publicUrl))
+
+    suspend fun deleteReplaceRule(baseUrl: String, publicUrl: String?, accessToken: String, id: Long): Result<Any> =
+        executeWithFailover { it.deleteReplaceRule(accessToken, id) }(buildEndpoints(baseUrl, publicUrl))
+
+    suspend fun toggleReplaceRule(baseUrl: String, publicUrl: String?, accessToken: String, id: Long, isEnabled: Boolean): Result<Any> =
+        executeWithFailover { it.toggleReplaceRule(accessToken, id, if (isEnabled) 1 else 0) }(buildEndpoints(baseUrl, publicUrl))
+    // endregion
 
     private fun createMultipartBodyPart(fileUri: Uri, context: Context): MultipartBody.Part? {
         return context.contentResolver.openInputStream(fileUri)?.use { inputStream ->
@@ -122,7 +138,7 @@ class ReadRepository(private val apiFactory: (String) -> ReadApiService) {
         val normalized = ensureTrailingSlash(baseUrl)
         return "${normalized}tts".toHttpUrlOrNull()?.newBuilder()
             ?.addQueryParameter("accessToken", accessToken)
-            ?.addQueryParameter("id", ttsId)
+            ?.addQueryPajrameter("id", ttsId)
             ?.addQueryParameter("speakText", text)
             ?.addQueryParameter("speechRate", speechRate.toString())
             ?.build()
@@ -142,8 +158,8 @@ class ReadRepository(private val apiFactory: (String) -> ReadApiService) {
 
     private fun ensureTrailingSlash(url: String): String = if (url.endsWith('/')) url else "$url/"
 
-    private fun <T> executeWithFailover(block: suspend (ReadApiService) -> Response<com.readapp.data.model.ApiResponse<T>>):
-        suspend (List<String>) -> Result<T> = lambda@ { endpoints: List<String> ->
+    private fun <T> executeWithFailover(block: suspend (ReadApiService) -> Response<ApiResponse<T>>):
+            suspend (List<String>) -> Result<T> = lambda@ { endpoints: List<String> ->
         var lastError: Throwable? = null
         for (endpoint in endpoints) {
             val api = apiFactory(endpoint)
@@ -151,10 +167,16 @@ class ReadRepository(private val apiFactory: (String) -> ReadApiService) {
                 val response = block(api)
                 if (response.isSuccessful) {
                     val body = response.body()
-                    if (body != null && body.isSuccess && body.data != null) {
-                        return@lambda Result.success(body.data)
+                    if (body != null) {
+                        if (body.isSuccess) {
+                            // API 有些data返回null表示成功，有些返回具体数据
+                            @Suppress("UNCHECKED_CAST")
+                            return@lambda Result.success(body.data ?: Unit as T)
+                        }
+                        lastError = IllegalStateException(body.errorMsg ?: "未知错误")
+                    } else {
+                        lastError = IllegalStateException("响应体为空")
                     }
-                    lastError = IllegalStateException(body?.errorMsg ?: "未知错误")
                 } else {
                     lastError = IllegalStateException("服务器返回状态码 ${response.code()}")
                 }

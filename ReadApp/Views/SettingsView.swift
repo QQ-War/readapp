@@ -116,6 +116,12 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
+
+                Section(header: Text("内容净化")) {
+                    NavigationLink(destination: ReplaceRuleListView()) {
+                        Text("净化规则管理")
+                    }
+                }
                 
                 Section(header: Text("书架设置")) {
                     Toggle("最近阅读排序", isOn: $preferences.bookshelfSortByRecent)

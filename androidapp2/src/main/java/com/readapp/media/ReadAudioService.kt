@@ -18,7 +18,7 @@ class ReadAudioService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         appendLog("ReadAudioService onCreate")
-        val player = PlayerHolder.get(this)
+        val player = PlayerPool.get(this)
         mediaSession = MediaSession.Builder(this, player).build()
     }
 

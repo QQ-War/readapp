@@ -1,4 +1,3 @@
-// MainActivity.kt - 去掉独立播放器页面，集成到阅读页面
 package com.readapp
 
 import android.content.ClipData
@@ -27,6 +26,7 @@ import androidx.navigation.compose.rememberNavController
 import com.readapp.ui.screens.BookshelfScreen
 import com.readapp.ui.screens.LoginScreen
 import com.readapp.ui.screens.ReadingScreen
+import com.readapp.ui.screens.ReplaceRuleScreen
 import com.readapp.ui.screens.SettingsScreen
 import com.readapp.ui.theme.ReadAppTheme
 import com.readapp.viewmodel.BookViewModel
@@ -131,7 +131,6 @@ fun ReadAppMain() {
                 val isPlayingUi by bookViewModel.isPlayingUi.collectAsState()
                 val currentPlayingParagraph by bookViewModel.currentParagraphIndex.collectAsState()
                 val preloadedParagraphs by bookViewModel.preloadedParagraphs.collectAsState()
-                val preloadedChapters by bookViewModel.preloadedChapters.collectAsState()
 
                 selectedBook?.let { book ->
                     ReadingScreen(
@@ -160,7 +159,6 @@ fun ReadAppMain() {
                         isPlaying = isPlayingUi,
                         currentPlayingParagraph = currentPlayingParagraph,
                         preloadedParagraphs = preloadedParagraphs,
-                        preloadedChapters = preloadedChapters,
                         onPlayPauseClick = {
                             bookViewModel.togglePlayPause()
                         },
@@ -246,6 +244,9 @@ fun ReadAppMain() {
                     onBookshelfSortByRecentChange = { enabled ->
                         bookViewModel.updateBookshelfSortByRecent(enabled)
                     },
+                    onNavigateToReplaceRules = {
+                        navController.navigate(Screen.ReplaceRules.route)
+                    },
                     onLogout = {
                         bookViewModel.logout()
                         navController.navigate(Screen.Login.route) {
@@ -256,6 +257,13 @@ fun ReadAppMain() {
                     onNavigateBack = {
                         navController.popBackStack()
                     }
+                )
+            }
+            
+            // 净化规则管理页面
+            composable(Screen.ReplaceRules.route) {
+                ReplaceRuleScreen(
+                    onNavigateBack = { navController.popBackStack() }
                 )
             }
         }
@@ -271,10 +279,11 @@ fun ReadAppMain() {
     }
 }
 
-// 导航路由定义（去掉 Player 页面）
+// 导航路由定义
 sealed class Screen(val route: String) {
     object Login : Screen("login")
     object Bookshelf : Screen("bookshelf")
     object Reading : Screen("reading")
     object Settings : Screen("settings")
+    object ReplaceRules : Screen("replace_rules")
 }

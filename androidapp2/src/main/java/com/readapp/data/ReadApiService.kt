@@ -6,6 +6,7 @@ import com.readapp.data.model.Book
 import com.readapp.data.model.Chapter
 import com.readapp.data.model.HttpTTS
 import com.readapp.data.model.LoginResponse
+import com.readapp.data.model.ReplaceRule
 import com.readapp.data.model.UserInfo
 import okhttp3.Interceptor
 import okhttp3.MultipartBody
@@ -14,6 +15,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.Multipart
 import retrofit2.http.POST
@@ -79,6 +81,33 @@ interface ReadApiService {
         @Query("accessToken") accessToken: String,
         @Part file: MultipartBody.Part
     ): Response<ApiResponse<Any>>
+
+    // region Replace Rules
+    @GET("getReplaceRulesNew")
+    suspend fun getReplaceRules(
+        @Query("accessToken") accessToken: String,
+        @Query("page") page: Int = 0
+    ): Response<ApiResponse<List<ReplaceRule>>>
+
+    @POST("addReplaceRule")
+    suspend fun addReplaceRule(
+        @Query("accessToken") accessToken: String,
+        @Body rule: ReplaceRule
+    ): Response<ApiResponse<Any>>
+    
+    @POST("delReplaceRule")
+    suspend fun deleteReplaceRule(
+        @Query("accessToken") accessToken: String,
+        @Query("id") id: Long
+    ): Response<ApiResponse<Any>>
+
+    @POST("stopReplaceRules")
+    suspend fun toggleReplaceRule(
+        @Query("accessToken") accessToken: String,
+        @Query("id") id: Long,
+        @Query("st") status: Int
+    ): Response<ApiResponse<Any>>
+    // endregion
 
     companion object {
         fun create(baseUrl: String, tokenProvider: () -> String): ReadApiService {

@@ -48,6 +48,7 @@ fun SettingsScreen(
     onClearLogs: () -> Unit,
     onLoggingEnabledChange: (Boolean) -> Unit,
     onBookshelfSortByRecentChange: (Boolean) -> Unit,
+    onNavigateToReplaceRules: () -> Unit,
     onLogout: () -> Unit,
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier
@@ -262,7 +263,16 @@ fun SettingsScreen(
                     }
                 }
             }
-            
+
+            SettingsSection(title = "内容净化") {
+                SettingsItem(
+                    icon = Icons.Default.CleaningServices,
+                    title = "净化规则管理",
+                    subtitle = "自定义规则清理书籍内容",
+                    onClick = onNavigateToReplaceRules
+                )
+            }
+
             // 数据管理
             SettingsSection(title = "数据管理") {
                 SettingsItem(

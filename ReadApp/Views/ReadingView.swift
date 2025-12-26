@@ -6,22 +6,24 @@ struct ReadingView: View {
     @EnvironmentObject var apiService: APIService
     @StateObject private var ttsManager = TTSManager.shared
     @StateObject private var preferences = UserPreferences.shared
+    @StateObject private var replaceRuleViewModel = ReplaceRuleViewModel()
     
     @State private var chapters: [BookChapter] = []
     @State private var currentChapterIndex: Int
     @State private var currentContent = ""
-    @State private var contentSentences: [String] = []  // 分段的内容
+    @State private var contentSentences: [String] = []
     @State private var isLoading = false
     @State private var showChapterList = false
-    @State private var showTTSControls = false
     @State private var errorMessage: String?
-    @State private var showUIControls = true  // 控制UI显示/隐藏（TTS播放时的沉浸模式）
-    @State private var scrollProxy: ScrollViewProxy?  // 保存ScrollViewProxy引用
-    @State private var lastTTSSentenceIndex: Int?  // 上次TTS播放的段落索引
+    @State private var showUIControls = true
+    @State private var scrollProxy: ScrollViewProxy?
+    @State private var lastTTSSentenceIndex: Int?
     
     init(book: Book) {
         self.book = book
         _currentChapterIndex = State(initialValue: book.durChapterIndex ?? 0)
+        // 从服务器加载的进度初始化
+        _lastTTSSentenceIndex = State(initialValue: Int(book.durChapterPos ?? 0))
     }
     
     var body: some View {
@@ -32,21 +34,19 @@ struct ReadingView: View {
             VStack(spacing: 0) {
                 // 内容区域
                 ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                            // 章节标题（UI隐藏时不显示）
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 16) {
                             if showUIControls {
-                        if currentChapterIndex < chapters.count {
-                            Text(chapters[currentChapterIndex].title)
-                                .font(.title2)
-                                .fontWeight(.bold)
-                                .padding(.bottom, 8)
+                                if currentChapterIndex < chapters.count {
+                                    Text(chapters[currentChapterIndex].title)
+                                        .font(.title2)
+                                        .fontWeight(.bold)
+                                        .padding(.bottom, 8)
                                 }
-                        }
-                        
-                            // 正文内容
+                            }
+                            
                             if !contentSentences.isEmpty && ttsManager.isPlaying {
-                                // TTS播放模式：使用分句显示并高亮当前句子
+                                // TTS播放模式
                                 VStack(alignment: .leading, spacing: preferences.fontSize * 0.8) {
                                     ForEach(Array(contentSentences.enumerated()), id: \.offset) { index, sentence in
                                         Text("　　" + sentence.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -59,64 +59,48 @@ struct ReadingView: View {
                                             .background(
                                                 RoundedRectangle(cornerRadius: 4)
                                                     .fill(
-                                                        // 当前播放：蓝色高亮
                                                         index == ttsManager.currentSentenceIndex
                                                             ? Color.blue.opacity(0.25)
-                                                            // 已预载且未播放：绿色高亮
                                                             : (ttsManager.preloadedIndices.contains(index) && index > ttsManager.currentSentenceIndex)
                                                                 ? Color.green.opacity(0.15)
                                                                 : Color.clear
                                                     )
                                                     .animation(.easeInOut(duration: 0.3), value: ttsManager.currentSentenceIndex)
-                                                    .animation(.easeInOut(duration: 0.3), value: ttsManager.preloadedIndices.count)
                                             )
                                             .id(index)
-                                            .scaleEffect(index == ttsManager.currentSentenceIndex ? 1.02 : 1.0)
-                                            .animation(.spring(response: 0.4, dampingFraction: 0.7), value: ttsManager.currentSentenceIndex)
                                     }
                                 }
                             } else {
-                                // 普通阅读模式：使用与TTS相同的分句显示
-                                if !contentSentences.isEmpty {
-                                    RichTextView(
-                                        sentences: contentSentences,
-                                        fontSize: preferences.fontSize,
-                                        lineSpacing: preferences.lineSpacing,
-                                        highlightIndex: lastTTSSentenceIndex,
-                                        scrollProxy: scrollProxy
-                                    )
-                                } else {
-                                    // 如果没有句子，显示原始内容
-                                    Text(currentContent)
-                                        .font(.system(size: preferences.fontSize))
-                                        .lineSpacing(preferences.lineSpacing)
-                                }
+                                // 普通阅读模式
+                                RichTextView(
+                                    sentences: contentSentences,
+                                    fontSize: preferences.fontSize,
+                                    lineSpacing: preferences.lineSpacing,
+                                    highlightIndex: lastTTSSentenceIndex,
+                                    scrollProxy: scrollProxy
+                                )
                             }
                         }
                         .padding()
                     }
-                    .contentShape(Rectangle())  // 使整个区域可点击
+                    .contentShape(Rectangle())
                     .onTapGesture {
-                        // 点击内容区域切换UI显示（TTS播放或普通阅读模式都支持）
                         withAnimation(.easeInOut(duration: 0.3)) {
                             showUIControls.toggle()
                         }
                     }
                     .onChange(of: ttsManager.currentSentenceIndex) { newIndex in
-                        // 自动滚动到当前朗读的段落
                         if ttsManager.isPlaying && !contentSentences.isEmpty {
-                            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                            withAnimation {
                                 proxy.scrollTo(newIndex, anchor: .center)
                             }
                         }
                     }
                     .onAppear {
-                        // 保存proxy引用，用于后续滚动
                         scrollProxy = proxy
                     }
                 }
                 
-                // 底部控制栏（UI隐藏时不显示）
                 if showUIControls {
                     if ttsManager.isPlaying && !contentSentences.isEmpty {
                         TTSControlBar(
@@ -140,7 +124,6 @@ struct ReadingView: View {
                 }
             }
             
-            // 加载指示器
             if isLoading {
                 ProgressView("加载中...")
                     .padding()
@@ -151,8 +134,8 @@ struct ReadingView: View {
         }
         .navigationTitle(book.name ?? "阅读")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarHidden(!showUIControls)  // UI隐藏时隐藏导航栏
-        .statusBar(hidden: !showUIControls)  // 同时隐藏状态栏
+        .navigationBarHidden(!showUIControls)
+        .statusBar(hidden: !showUIControls)
         .sheet(isPresented: $showChapterList) {
             ChapterListView(
                 chapters: chapters,
@@ -166,80 +149,67 @@ struct ReadingView: View {
         }
         .task {
             await loadChapters()
+            await replaceRuleViewModel.fetchRules()
         }
         .alert("错误", isPresented: .constant(errorMessage != nil)) {
-            Button("确定") {
-                errorMessage = nil
-            }
+            Button("确定") { errorMessage = nil }
         } message: {
-            if let error = errorMessage {
-                Text(error)
-            }
+            if let error = errorMessage { Text(error) }
         }
         .onDisappear {
             saveProgress()
         }
         .onChange(of: ttsManager.isPlaying) { isPlaying in
-            // 当TTS停止播放时，自动显示UI并更新高亮位置
             if !isPlaying {
                 showUIControls = true
-                // 更新最后播放的句子索引，以便在普通模式显示高亮
                 if ttsManager.currentSentenceIndex > 0 && ttsManager.currentSentenceIndex <= contentSentences.count {
-                    lastTTSSentenceIndex = ttsManager.currentSentenceIndex - 1
-                    // 滚动到最后播放的位置
-                    if let scrollProxy = scrollProxy, let lastIndex = lastTTSSentenceIndex {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            withAnimation {
-                                scrollProxy.scrollTo(lastIndex, anchor: .center)
-                            }
-                        }
-                    }
+                    lastTTSSentenceIndex = ttsManager.currentSentenceIndex
                 }
             }
         }
     }
     
-    // MARK: - 移除SVG标签
+    // MARK: - 内容处理
+    private func applyReplaceRules(to content: String) -> String {
+        var processedContent = content
+        let enabledRules = replaceRuleViewModel.rules.filter { $0.isEnabled }
+        
+        for rule in enabledRules {
+            do {
+                let regex = try NSRegularExpression(pattern: rule.pattern, options: .caseInsensitive)
+                let range = NSRange(location: 0, length: processedContent.utf16.count)
+                processedContent = regex.stringByReplacingMatches(in: processedContent, options: [], range: range, withTemplate: rule.replaceWith)
+            } catch {
+                LogManager.shared.log("无效的净化规则: '\(rule.pattern)'. 错误: \(error)", category: "错误")
+            }
+        }
+        return processedContent
+    }
+
     private func removeHTMLAndSVG(_ text: String) -> String {
         var result = text
-        
-        // 只移除SVG标签（包括多行SVG）
-        let svgPattern = "<svg[^>]*>.*?</svg>"
+        let svgPattern = "<svg[^>]*>.*?<\/svg>"
         if let svgRegex = try? NSRegularExpression(pattern: svgPattern, options: [.caseInsensitive, .dotMatchesLineSeparators]) {
-            let range = NSRange(location: 0, length: result.utf16.count)
-            result = svgRegex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "")
+            result = svgRegex.stringByReplacingMatches(in: result, options: [], range: NSRange(location: 0, length: result.utf16.count), withTemplate: "")
         }
-        
-        // 移除img标签
         let imgPattern = "<img[^>]*>"
         if let imgRegex = try? NSRegularExpression(pattern: imgPattern, options: [.caseInsensitive]) {
-            let range = NSRange(location: 0, length: result.utf16.count)
-            result = imgRegex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "")
+            result = imgRegex.stringByReplacingMatches(in: result, options: [], range: NSRange(location: 0, length: result.utf16.count), withTemplate: "")
         }
-        
         return result
     }
     
-    // MARK: - 按原文分段（保持原始分段，优化缩进）
     private func splitIntoParagraphs(_ text: String) -> [String] {
-        // 按换行符分割，保持原文分段
-        let paragraphs = text.components(separatedBy: "\n")
-            .map { $0.trimmingCharacters(in: .whitespaces) }  // 移除每段的前后空白
-            .filter { !$0.isEmpty }  // 过滤空段落
-        
-        return paragraphs
+        return text.components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
     }
     
-    // MARK: - 加载章节列表
+    // MARK: - 数据加载
     private func loadChapters() async {
         isLoading = true
         do {
-            chapters = try await apiService.fetchChapterList(
-                bookUrl: book.bookUrl ?? "",
-                bookSourceUrl: book.origin
-            )
-            
-            // 加载当前章节内容
+            chapters = try await apiService.fetchChapterList(bookUrl: book.bookUrl ?? "", bookSourceUrl: book.origin)
             loadChapterContent()
         } catch {
             errorMessage = error.localizedDescription
@@ -247,10 +217,8 @@ struct ReadingView: View {
         isLoading = false
     }
     
-    // MARK: - 加载章节内容
     private func loadChapterContent() {
         guard currentChapterIndex < chapters.count else { return }
-        
         isLoading = true
         Task {
             do {
@@ -261,60 +229,36 @@ struct ReadingView: View {
                 )
                 
                 await MainActor.run {
-                    // 检查内容是否为空
                     if content.isEmpty {
-                        currentContent = "章节内容为空\n\n可能的原因：\n1. 书源暂时无法访问\n2. 该章节需要VIP权限\n3. 网络连接问题\n\n请稍后重试或更换书源"
+                        currentContent = "章节内容为空"
                         errorMessage = "章节内容为空"
                         contentSentences = []
                     } else {
-                        // 移除所有HTML和SVG标签
-                        let cleanedContent = removeHTMLAndSVG(content)
-                        currentContent = cleanedContent
-                        
-                        // 分割句子以便TTS高亮
-                        contentSentences = splitIntoParagraphs(cleanedContent)
-                        
-                        // 检查是否有TTS进度，如果有则设置高亮并滚动到上次播放的段落
-                        if let progress = preferences.getTTSProgress(bookUrl: book.bookUrl ?? ""),
-                           progress.chapterIndex == currentChapterIndex,
-                           progress.sentenceIndex < contentSentences.count {
-                            // 设置高亮段落索引
-                            lastTTSSentenceIndex = progress.sentenceIndex
-                        } else {
-                            lastTTSSentenceIndex = nil
-                        }
+                        var processedContent = removeHTMLAndSVG(content)
+                        processedContent = applyReplaceRules(to: processedContent)
+                        currentContent = processedContent
+                        contentSentences = splitIntoParagraphs(processedContent)
                     }
                     isLoading = false
                     
-                    // 如果TTS正在播放同一本书和同一章节，则保持TTS模式，否则停止
                     if ttsManager.isPlaying {
                         let currentBookUrl = book.bookUrl ?? ""
                         if ttsManager.bookUrl != currentBookUrl || ttsManager.currentChapterIndex != currentChapterIndex {
                             ttsManager.stop()
                         }
                     }
-                    
-                    // 预加载下一章内容到缓存
                     preloadNextChapter()
                 }
             } catch {
                 await MainActor.run {
-                    let errorDescription = error.localizedDescription
-                    errorMessage = "获取章节失败: \(errorDescription)"
-                    
-                    // 显示友好的错误信息
-                    if errorDescription.contains("json string can not be null or empty") {
-                        currentContent = "章节获取失败\n\n该书源可能暂时无法获取正文内容。\n\n建议：\n1. 检查网络连接\n2. 稍后重试\n3. 更换其他书源\n4. 联系管理员检查书源配置"
-                    } else {
-                        currentContent = "章节加载失败\n\n错误信息: \(errorDescription)\n\n请稍后重试"
-                    }
+                    errorMessage = "获取章节失败: \(error.localizedDescription)"
                     isLoading = false
                 }
             }
         }
     }
     
-    // MARK: - 上一章
+    // MARK: - 章节导航
     private func previousChapter() {
         guard currentChapterIndex > 0 else { return }
         currentChapterIndex -= 1
@@ -322,7 +266,6 @@ struct ReadingView: View {
         saveProgress()
     }
     
-    // MARK: - 下一章
     private func nextChapter() {
         guard currentChapterIndex < chapters.count - 1 else { return }
         currentChapterIndex += 1
@@ -330,7 +273,7 @@ struct ReadingView: View {
         saveProgress()
     }
     
-    // MARK: - 切换听书
+    // MARK: - TTS 控制
     private func toggleTTS() {
         if ttsManager.isPlaying {
             if ttsManager.isPaused {
@@ -343,10 +286,11 @@ struct ReadingView: View {
         }
     }
     
-    // MARK: - 开始听书
     private func startTTS() {
-        // TTS开始时显示UI，让用户看到控制面板
         showUIControls = true
+        
+        // 优先使用最后播放的索引，其次是服务器加载的索引
+        let startIndex = lastTTSSentenceIndex ?? Int(book.durChapterPos ?? 0)
         
         ttsManager.startReading(
             text: currentContent,
@@ -355,49 +299,40 @@ struct ReadingView: View {
             bookUrl: book.bookUrl ?? "",
             bookSourceUrl: book.origin,
             bookTitle: book.name ?? "未知书名",
-            coverUrl: book.displayCoverUrl
-        ) { newIndex in
-            currentChapterIndex = newIndex
-            loadChapterContent()
-            saveProgress()
-        }
+            coverUrl: book.displayCoverUrl,
+            onChapterChange: { newIndex in
+                currentChapterIndex = newIndex
+                loadChapterContent()
+                saveProgress()
+            },
+            startAtSentenceIndex: startIndex
+        )
     }
     
-    // MARK: - 预加载下一章
+    // MARK: - 进度与预加载
     private func preloadNextChapter() {
-        // 检查是否有下一章
         guard currentChapterIndex < chapters.count - 1 else { return }
-        
         let nextChapterIndex = currentChapterIndex + 1
-        
-        // 在后台预加载下一章内容
         Task {
-            do {
-                // 调用 fetchChapterContent 会自动将内容存入 APIService 的缓存
-                _ = try await apiService.fetchChapterContent(
-                    bookUrl: book.bookUrl ?? "",
-                    bookSourceUrl: book.origin,
-                    index: nextChapterIndex
-                )
-                print("✅ 已预加载下一章：\(chapters[nextChapterIndex].title)")
-            } catch {
-                // 预加载失败不影响当前阅读，静默处理
-                print("⚠️ 预加载下一章失败: \(error.localizedDescription)")
-            }
+            _ = try? await apiService.fetchChapterContent(
+                bookUrl: book.bookUrl ?? "",
+                bookSourceUrl: book.origin,
+                index: nextChapterIndex
+            )
         }
     }
     
-    // MARK: - 保存进度
     private func saveProgress() {
         guard let bookUrl = book.bookUrl else { return }
-        
         Task {
             do {
                 let title = currentChapterIndex < chapters.count ? chapters[currentChapterIndex].title : nil
+                let position = ttsManager.isPlaying ? Double(ttsManager.currentSentenceIndex) : Double(lastTTSSentenceIndex ?? 0)
+                
                 try await apiService.saveBookProgress(
                     bookUrl: bookUrl,
                     index: currentChapterIndex,
-                    pos: 0,
+                    pos: position,
                     title: title
                 )
             } catch {
@@ -407,7 +342,7 @@ struct ReadingView: View {
     }
 }
 
-// MARK: - 章节列表视图
+// MARK: - Subviews (ChapterList, RichText, ControlBars)
 struct ChapterListView: View {
     let chapters: [BookChapter]
     let currentIndex: Int
@@ -423,43 +358,34 @@ struct ChapterListView: View {
     var body: some View {
         NavigationView {
             ScrollViewReader { proxy in
-            List {
+                List {
                     ForEach(displayedChapters, id: \.element.id) { item in
-                    Button(action: {
-                                onSelectChapter(item.offset)
-                        dismiss()
-                    }) {
-                        HStack {
+                        Button(action: {
+                            onSelectChapter(item.offset)
+                            dismiss()
+                        }) {
+                            HStack {
                                 Text(item.element.title)
                                     .foregroundColor(item.offset == currentIndex ? .blue : .primary)
                                     .fontWeight(item.offset == currentIndex ? .semibold : .regular)
-                            Spacer()
+                                Spacer()
                                 if item.offset == currentIndex {
-                                    Image(systemName: "book.fill")
-                                    .foregroundColor(.blue)
-                                        .font(.caption)
+                                    Image(systemName: "book.fill").foregroundColor(.blue).font(.caption)
                                 }
                             }
                         }
-                        .id(item.offset) // 为每个章节设置唯一ID
-                        .listRowBackground(
-                            item.offset == currentIndex ? Color.blue.opacity(0.1) : Color.clear
-                        )
+                        .id(item.offset)
+                        .listRowBackground(item.offset == currentIndex ? Color.blue.opacity(0.1) : Color.clear)
                     }
                 }
                 .navigationTitle("目录（共\(chapters.count)章）")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
                         Button(action: {
-                            withAnimation {
-                                isReversed.toggle()
-                            }
-                            // 切换顺序后重新聚焦
+                            withAnimation { isReversed.toggle() }
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-                                    proxy.scrollTo(currentIndex, anchor: .center)
-                                }
+                                withAnimation { proxy.scrollTo(currentIndex, anchor: .center) }
                             }
                         }) {
                             HStack(spacing: 4) {
@@ -469,19 +395,13 @@ struct ChapterListView: View {
                             .font(.caption)
                         }
                     }
-                    
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("关闭") {
-                        dismiss()
-                        }
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("关闭") { dismiss() }
                     }
                 }
                 .onAppear {
-                    // 延迟滚动以确保列表已完全渲染
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                        withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-                            proxy.scrollTo(currentIndex, anchor: .center)
-                        }
+                        withAnimation { proxy.scrollTo(currentIndex, anchor: .center) }
                     }
                 }
             }
@@ -489,13 +409,12 @@ struct ChapterListView: View {
     }
 }
 
-// MARK: - 富文本显示视图（使用SwiftUI原生Text）
 struct RichTextView: View {
-    let sentences: [String]  // 句子列表（与TTS使用相同的分句）
+    let sentences: [String]
     let fontSize: CGFloat
     let lineSpacing: CGFloat
-    let highlightIndex: Int?  // 要高亮的句子索引
-    let scrollProxy: ScrollViewProxy?  // 用于滚动
+    let highlightIndex: Int?
+    let scrollProxy: ScrollViewProxy?
     
     var body: some View {
         VStack(alignment: .leading, spacing: fontSize * 0.8) {
@@ -508,29 +427,24 @@ struct RichTextView: View {
                     .padding(.vertical, 6)
                     .padding(.horizontal, 8)
                     .background(
-                        // 如果是上次TTS播放的段落，添加高亮
                         RoundedRectangle(cornerRadius: 4)
                             .fill(index == highlightIndex ? Color.orange.opacity(0.2) : Color.clear)
-                            .animation(.easeInOut(duration: 0.3), value: highlightIndex)
+                            .animation(.easeInOut, value: highlightIndex)
                     )
-                    .id(index)  // 用于滚动定位
+                    .id(index)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear {
-            // 如果有高亮段落，自动滚动到该位置
             if let highlightIndex = highlightIndex, let scrollProxy = scrollProxy {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-                        scrollProxy.scrollTo(highlightIndex, anchor: .center)
-                    }
+                    withAnimation { scrollProxy.scrollTo(highlightIndex, anchor: .center) }
                 }
             }
         }
     }
 }
 
-// MARK: - TTS控制栏
 struct TTSControlBar: View {
     @ObservedObject var ttsManager: TTSManager
     let currentChapterIndex: Int
@@ -541,7 +455,6 @@ struct TTSControlBar: View {
     
     var body: some View {
         VStack(spacing: 12) {
-            // 第一行：段落导航
             HStack(spacing: 20) {
                 Button(action: { ttsManager.previousSentence() }) {
                     VStack(spacing: 4) {
@@ -553,13 +466,11 @@ struct TTSControlBar: View {
                 .disabled(ttsManager.currentSentenceIndex <= 0)
                 
                 Spacer()
-                
                 VStack(spacing: 4) {
                     Text("段落进度").font(.caption).foregroundColor(.secondary)
                     Text("\(ttsManager.currentSentenceIndex + 1) / \(ttsManager.totalSentences)")
                         .font(.title2).fontWeight(.semibold)
                 }
-                
                 Spacer()
                 
                 Button(action: { ttsManager.nextSentence() }) {
@@ -575,15 +486,13 @@ struct TTSControlBar: View {
             
             Divider().padding(.horizontal, 20)
             
-            // 第二行：章节导航和控制
             HStack(spacing: 25) {
                 Button(action: onPreviousChapter) {
                     VStack(spacing: 2) {
                         Image(systemName: "chevron.left").font(.title3)
                         Text("上一章").font(.caption2)
                     }
-                }
-                .disabled(currentChapterIndex <= 0)
+                }.disabled(currentChapterIndex <= 0)
                 
                 Button(action: onShowChapterList) {
                     VStack(spacing: 2) {
@@ -593,13 +502,8 @@ struct TTSControlBar: View {
                 }
                 
                 Spacer()
-                
                 Button(action: {
-                    if ttsManager.isPaused {
-                        ttsManager.resume()
-                    } else {
-                        ttsManager.pause()
-                    }
+                    if ttsManager.isPaused { ttsManager.resume() } else { ttsManager.pause() }
                 }) {
                     VStack(spacing: 2) {
                         Image(systemName: ttsManager.isPaused ? "play.circle.fill" : "pause.circle.fill")
@@ -607,7 +511,6 @@ struct TTSControlBar: View {
                         Text(ttsManager.isPaused ? "播放" : "暂停").font(.caption2)
                     }
                 }
-                
                 Spacer()
                 
                 Button(action: { ttsManager.stop() }) {
@@ -622,8 +525,7 @@ struct TTSControlBar: View {
                         Image(systemName: "chevron.right").font(.title3)
                         Text("下一章").font(.caption2)
                     }
-                }
-                .disabled(currentChapterIndex >= chaptersCount - 1)
+                }.disabled(currentChapterIndex >= chaptersCount - 1)
             }
             .padding(.horizontal, 20).padding(.bottom, 12)
         }
@@ -632,7 +534,6 @@ struct TTSControlBar: View {
     }
 }
 
-// MARK: - 普通控制栏
 struct NormalControlBar: View {
     let currentChapterIndex: Int
     let chaptersCount: Int
@@ -648,8 +549,7 @@ struct NormalControlBar: View {
                     Image(systemName: "chevron.left").font(.title2)
                     Text("上一章").font(.caption2)
                 }
-            }
-            .disabled(currentChapterIndex <= 0)
+            }.disabled(currentChapterIndex <= 0)
             
             Button(action: onShowChapterList) {
                 VStack(spacing: 4) {
@@ -659,7 +559,6 @@ struct NormalControlBar: View {
             }
             
             Spacer()
-            
             Button(action: onToggleTTS) {
                 VStack(spacing: 4) {
                     Image(systemName: "speaker.wave.2.circle.fill")
@@ -667,7 +566,6 @@ struct NormalControlBar: View {
                     Text("听书").font(.caption2).foregroundColor(.blue)
                 }
             }
-            
             Spacer()
             
             Button(action: { /* TODO: 字体设置 */ }) {
@@ -682,12 +580,10 @@ struct NormalControlBar: View {
                     Image(systemName: "chevron.right").font(.title2)
                     Text("下一章").font(.caption2)
                 }
-            }
-            .disabled(currentChapterIndex >= chaptersCount - 1)
+            }.disabled(currentChapterIndex >= chaptersCount - 1)
         }
         .padding(.horizontal, 20).padding(.vertical, 12)
         .background(Color(UIColor.systemBackground))
         .shadow(color: Color.black.opacity(0.1), radius: 5, y: -2)
     }
 }
-

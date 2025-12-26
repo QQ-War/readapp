@@ -340,7 +340,7 @@ class TTSManager: NSObject, ObservableObject {
     }
     
     // MARK: - 开始朗读
-    func startReading(text: String, chapters: [BookChapter], currentIndex: Int, bookUrl: String, bookSourceUrl: String?, bookTitle: String, coverUrl: String?, onChapterChange: @escaping (Int) -> Void, resumeFromProgress: Bool = true) {
+    func startReading(text: String, chapters: [BookChapter], currentIndex: Int, bookUrl: String, bookSourceUrl: String?, bookTitle: String, coverUrl: String?, onChapterChange: @escaping (Int) -> Void, startAtSentenceIndex: Int? = nil) {
         logger.log("开始朗读 - 书名: \(bookTitle), 章节: \(currentIndex)/\(chapters.count)", category: "TTS")
         logger.log("内容长度: \(text.count) 字符", category: "TTS")
         
@@ -370,14 +370,14 @@ class TTSManager: NSObject, ObservableObject {
         sentences = splitTextIntoSentences(text)
         totalSentences = sentences.count
         
-        // 尝试恢复进度
-        if resumeFromProgress, let progress = UserPreferences.shared.getTTSProgress(bookUrl: bookUrl) {
-            if progress.chapterIndex == currentIndex && progress.sentenceIndex < sentences.count {
-                currentSentenceIndex = progress.sentenceIndex
-                logger.log("恢复TTS进度 - 章节: \(currentIndex), 段落: \(currentSentenceIndex)", category: "TTS")
-            } else {
-                currentSentenceIndex = 0
-            }
+        // 优先使用外部传入的起始索引，其次是本地缓存，最后是0
+        if let externalIndex = startAtSentenceIndex, externalIndex < sentences.count {
+            currentSentenceIndex = externalIndex
+            logger.log("从服务器恢复TTS进度 - 章节: \(currentIndex), 段落: \(currentSentenceIndex)", category: "TTS")
+        } else if let progress = UserPreferences.shared.getTTSProgress(bookUrl: bookUrl),
+                  progress.chapterIndex == currentIndex && progress.sentenceIndex < sentences.count {
+            currentSentenceIndex = progress.sentenceIndex
+            logger.log("从本地恢复TTS进度 - 章节: \(currentIndex), 段落: \(currentSentenceIndex)", category: "TTS")
         } else {
             currentSentenceIndex = 0
         }
@@ -615,7 +615,7 @@ class TTSManager: NSObject, ObservableObject {
 
     private func extractSpeaker(from sentence: String) -> String? {
         // 匹配“张三：”或“张三说：”等格式
-        let pattern = "^\\s*([\\p{Han}A-Za-z0-9_·]{1,12})[\\s　]*[：:，,]?\\s*[\"“]"
+        let pattern = "^\s*([\p{Han}A-Za-z0-9_·]{1,12})[\s　]*[：:，,]?\s*[\"“]"
         guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
         let range = NSRange(location: 0, length: sentence.utf16.count)
         if let match = regex.firstMatch(in: sentence, options: [], range: range),
@@ -826,8 +826,8 @@ class TTSManager: NSObject, ObservableObject {
             
             // 计算需要预载的索引 (未缓存且不在队列中)
             // 注意：这里简化为只检查缓存，每次都刷新队列以确保顺序优先
-            let neededIndices = (startIndex..<endIndex).filter { index in
-                cachedAudio(for: index) == nil
+            let neededIndices = (startIndex..<endIndex).filter {
+                cachedAudio(for: $0) == nil
             }
 
             if !neededIndices.isEmpty {
