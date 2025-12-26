@@ -4,6 +4,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -108,9 +110,9 @@ fun ReplaceRuleScreen(
 @Composable
 fun ReplaceRuleItem(
     rule: ReplaceRule,
-    onEdit: (ReplaceRule) -> Unit,
+    onEdit: () -> Unit,
     onToggleEnabled: (Boolean) -> Unit,
-    onDelete: (ReplaceRule) -> Unit
+    onDelete: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -121,7 +123,7 @@ fun ReplaceRuleItem(
     ) {
         Column(
             modifier = Modifier
-                .clickable { onEdit(rule) }
+                .clickable(onClick = onEdit)
                 .padding(AppDimens.PaddingMedium)
                 .fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -134,19 +136,23 @@ fun ReplaceRuleItem(
                 Text(rule.name, style = MaterialTheme.typography.titleMedium)
                 Switch(
                     checked = rule.isEnabled,
-                    onCheckedChange = onToggleEnabled,
-                    modifier = Modifier.size(24.dp) // Adjust size if needed
+                    onCheckedChange = onToggleEnabled
                 )
             }
-            Text("模式: ${rule.pattern}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-            Text("替换: ${rule.replacement}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-            Text("顺序: ${rule.order}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.customColors.textSecondary)
-            
+            rule.groupname?.let {
+                if(it.isNotBlank()) {
+                    Text("分组: $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.customColors.textSecondary)
+                }
+            }
+            Text("模式: ${rule.pattern}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, maxLines = 2)
+            Text("替换: ${rule.replacement}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, maxLines = 2)
+            Text("顺序: ${rule.ruleOrder}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.customColors.textSecondary)
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
-                TextButton(onClick = { onDelete(rule) }) {
+                TextButton(onClick = onDelete) {
                     Text("删除", color = MaterialTheme.colorScheme.error)
                 }
             }
@@ -162,57 +168,49 @@ fun ReplaceRuleEditDialog(
     onSave: (ReplaceRule) -> Unit
 ) {
     var name by remember(rule) { mutableStateOf(rule?.name ?: "") }
+    var groupname by remember(rule) { mutableStateOf(rule?.groupname ?: "") }
     var pattern by remember(rule) { mutableStateOf(rule?.pattern ?: "") }
     var replacement by remember(rule) { mutableStateOf(rule?.replacement ?: "") }
-    var order by remember(rule) { mutableStateOf(rule?.order ?: 0) }
+    var scope by remember(rule) { mutableStateOf(rule?.scope ?: "") }
+    var excludeScope by remember(rule) { mutableStateOf(rule?.excludeScope ?: "") }
+    var ruleOrder by remember(rule) { mutableStateOf(rule?.ruleOrder ?: 0) }
     var isEnabled by remember(rule) { mutableStateOf(rule?.isEnabled ?: true) }
+    var isRegex by remember(rule) { mutableStateOf(rule?.isRegex ?: true) }
+    var scopeTitle by remember(rule) { mutableStateOf(rule?.scopeTitle ?: false) }
+    var scopeContent by remember(rule) { mutableStateOf(rule?.scopeContent ?: true) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (rule == null) "??????" else "??????") },
+        title = { Text(if (rule == null) "添加净化规则" else "编辑净化规则") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(AppDimens.PaddingSmall)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("规则名称") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = pattern,
-                    onValueChange = { pattern = it },
-                    label = { Text("匹配内容 (正则表达式)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace)
-                )
-                OutlinedTextField(
-                    value = replacement,
-                    onValueChange = { replacement = it },
-                    label = { Text("替换为") },
-                    modifier = Modifier.fillMaxWidth(),
-                    textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace)
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("执行顺序: $order")
-                    Slider(
-                        value = order.toFloat(),
-                        onValueChange = { order = it.toInt() },
-                        valueRange = 0f..100f, // 假定一个合理的顺序范围
-                        steps = 99,
-                        modifier = Modifier.weight(1f)
-                    )
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("规则名称*") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = pattern, onValueChange = { pattern = it }, label = { Text("匹配内容* (正则)") }, modifier = Modifier.fillMaxWidth(), textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace))
+                OutlinedTextField(value = replacement, onValueChange = { replacement = it }, label = { Text("替换为") }, modifier = Modifier.fillMaxWidth(), textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace))
+                OutlinedTextField(value = groupname, onValueChange = { groupname = it }, label = { Text("分组") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = scope, onValueChange = { scope = it }, label = { Text("作用范围 (书名,逗号隔开)") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = excludeScope, onValueChange = { excludeScope = it }, label = { Text("排除范围 (书名,逗号隔开)") }, modifier = Modifier.fillMaxWidth())
+
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("执行顺序: $ruleOrder")
+                    Slider(value = ruleOrder.toFloat(), onValueChange = { ruleOrder = it.toInt() }, valueRange = 0f..100f, steps = 99, modifier = Modifier.weight(1f))
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("启用")
+
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("启用规则")
                     Switch(checked = isEnabled, onCheckedChange = { isEnabled = it })
+                }
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("使用正则")
+                    Switch(checked = isRegex, onCheckedChange = { isRegex = it })
+                }
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("作用于标题")
+                    Switch(checked = scopeTitle, onCheckedChange = { scopeTitle = it })
+                }
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("作用于正文")
+                    Switch(checked = scopeContent, onCheckedChange = { scopeContent = it })
                 }
             }
         },
@@ -220,13 +218,19 @@ fun ReplaceRuleEditDialog(
             Button(
                 onClick = {
                     val newRule = ReplaceRule(
-                        id = rule?.id ?: "", // Preserve ID for updates, empty for new
+                        id = rule?.id ?: "", // Preserve ID for updates
+                        name = name,
+                        groupname = groupname,
                         pattern = pattern,
                         replacement = replacement,
-                        scope = rule?.scope ?: "", // Default or preserve scope
-                        name = name,
-                        order = order,
-                        isEnabled = isEnabled
+                        scope = scope,
+                        scopeTitle = scopeTitle,
+                        scopeContent = scopeContent,
+                        excludeScope = excludeScope,
+                        isEnabled = isEnabled,
+                        isRegex = isRegex,
+                        timeoutMillisecond = rule?.timeoutMillisecond ?: 3000L,
+                        ruleOrder = ruleOrder
                     )
                     onSave(newRule)
                 },

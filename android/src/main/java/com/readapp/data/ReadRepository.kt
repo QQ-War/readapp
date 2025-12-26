@@ -85,7 +85,11 @@ class ReadRepository(private val apiFactory: (String) -> ReadApiService) {
             it.getReplaceRulesPage(accessToken)
         }(buildEndpoints(baseUrl, publicUrl))
 
-        val pageInfo = pageInfoResult.getOrElse { return Result.failure(it) }
+        if (pageInfoResult.isFailure) {
+            return Result.failure(pageInfoResult.exceptionOrNull() ?: IllegalStateException("Failed to fetch page info"))
+        }
+        val pageInfo = pageInfoResult.getOrThrow()
+
         val totalPages = pageInfo.page
         if (totalPages <= 0 || pageInfo.md5.isBlank()) {
             return Result.success(emptyList())
@@ -97,10 +101,10 @@ class ReadRepository(private val apiFactory: (String) -> ReadApiService) {
                 it.getReplaceRules(accessToken, pageInfo.md5, page)
             }(buildEndpoints(baseUrl, publicUrl))
 
-            result.onSuccess { rules ->
-                allRules.addAll(rules)
-            }.onFailure {
-                return Result.failure(it)
+            if (result.isSuccess) {
+                allRules.addAll(result.getOrThrow())
+            } else {
+                return Result.failure(result.exceptionOrNull() ?: IllegalStateException("Failed to fetch page $page"))
             }
         }
         return Result.success(allRules)

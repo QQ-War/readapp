@@ -16,33 +16,44 @@ struct ReplaceRuleListView: View {
             } else {
                 ForEach(viewModel.rules, id: \.identifiableId) { rule in
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(rule.name)
-                            .font(.headline)
-                        
                         HStack {
-                            Text("替换:")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Text(rule.pattern)
-                                .font(.system(.caption, design: .monospaced))
-                                .lineLimit(1)
+                            Text(rule.name)
+                                .font(.headline)
                             Spacer()
-                            Image(systemName: "arrow.right")
-                            Spacer()
-                            Text(rule.replacement)
-                                .font(.system(.caption, design: .monospaced))
-                                .lineLimit(1)
-                        }
-                        
-                        Toggle(isOn: Binding(
-                            get: { rule.isEnabled },
-                            set: { newValue in
-                                Task {
-                                    await viewModel.toggleRule(id: rule.id ?? "", isEnabled: newValue)
-                                }
+                            if let group = rule.groupname, !group.isEmpty {
+                                Text(group)
+                                    .font(.footnote)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.secondary.opacity(0.2))
+                                    .cornerRadius(6)
                             }
-                        )) {
-                            Text("启用")
+                        }
+
+                        Text("模式: \(rule.pattern)")
+                            .font(.system(.caption, design: .monospaced))
+                            .lineLimit(2)
+                        
+                        Text("替换: \(rule.replacement)")
+                            .font(.system(.caption, design: .monospaced))
+                            .lineLimit(2)
+
+                        HStack {
+                            Text("顺序: \(rule.ruleorder ?? 0)")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Toggle(isOn: Binding(
+                                get: { rule.isEnabled ?? true },
+                                set: { newValue in
+                                    Task {
+                                        await viewModel.toggleRule(id: rule.id ?? "", isEnabled: newValue)
+                                    }
+                                }
+                            )) {
+                                Text("启用").font(.caption2)
+                            }
+                            .scaleEffect(0.8) // Make toggle smaller
                         }
                     }
                     .padding(.vertical, 4)

@@ -77,28 +77,23 @@ struct ChapterContentResponse: Codable {
 
 // MARK: - Replace Rule Model
 struct ReplaceRule: Codable, Identifiable {
-    private let fallbackId = UUID()
-    
     let id: String?
     let name: String
+    let groupname: String?
     let pattern: String
     let replacement: String
     let scope: String?
-    let ruleorder: Int
-    let isEnabled: Bool
+    let scopeTitle: Bool?
+    let scopeContent: Bool?
+    let excludeScope: String?
+    let isEnabled: Bool?
+    let isRegex: Bool?
+    let timeoutMillisecond: Int64?
+    let ruleorder: Int?
 
-    var identifiableId: UUID {
-        fallbackId
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case name
-        case pattern
-        case replacement
-        case scope
-        case ruleorder = "order" // 服务端字段是 order，这里映射一下
-        case isEnabled
+    // A computed property for Identifiable conformance that is stable.
+    var identifiableId: String {
+        id ?? UUID().uuidString
     }
 }
 
