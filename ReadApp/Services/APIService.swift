@@ -334,4 +334,78 @@ class APIService: ObservableObject {
             throw NSError(domain: "APIService", code: 500, userInfo: [NSLocalizedDescriptionKey: apiResponse.errorMsg ?? "切换规则状态时发生未知错误"])
         }
     }
+    
+    // MARK: - Book Import
+    func importBook(from url: URL) async throws {
+        guard !accessToken.isEmpty else {
+            throw NSError(domain: "APIService", code: 401, userInfo: [NSLocalizedDescriptionKey: "请先登录"])
+        }
+        
+        guard let serverURL = URL(string: "\(baseURL)/uploadBook") else {
+            throw NSError(domain: "APIService", code: 400, userInfo: [NSLocalizedDescriptionKey: "无效的上传URL"])
+        }
+        
+        var request = URLRequest(url: serverURL)
+        request.httpMethod = "POST"
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type") // Or appropriate content type
+        request.setValue(accessToken, forHTTPHeaderField: "accessToken")
+        
+        do {
+            let (data, response) = try await URLSession.shared.upload(for: request, fromFile: url)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw NSError(domain: "APIService", code: 500, userInfo: [NSLocalizedDescriptionKey: "无效的响应类型"])
+            }
+            
+            if httpResponse.statusCode != 200 {
+                let errorMsg = String(data: data, encoding: .utf8) ?? "未知服务器错误"
+                throw NSError(domain: "APIService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "上传失败: \(errorMsg)"])
+            }
+            
+            let apiResponse = try JSONDecoder().decode(APIResponse<String>.self, from: data)
+            if !apiResponse.isSuccess {
+                throw NSError(domain: "APIService", code: 500, userInfo: [NSLocalizedDescriptionKey: apiResponse.errorMsg ?? "导入书籍失败"])
+            }
+        } catch let error as NSError {
+            throw NSError(domain: "APIService", code: error.code, userInfo: [NSLocalizedDescriptionKey: "上传书籍失败: \(error.localizedDescription)"])
+        }
+    }
+    
+    // MARK: - Cache Management
+    func clearAllRemoteCache() async throws {
+        guard !accessToken.isEmpty else {
+            throw NSError(domain: "APIService", code: 401, userInfo: [NSLocalizedDescriptionKey: "请先登录"])
+        }
+        let queryItems = [
+            URLQueryItem(name: "accessToken", value: accessToken)
+        ]
+        let (data, httpResponse) = try await requestWithFailback(endpoint: "clearAllRemoteCache", queryItems: queryItems)
+        guard httpResponse.statusCode == 200 else {
+            throw NSError(domain: "APIService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "清除远程缓存失败"])
+        }
+        let apiResponse = try JSONDecoder().decode(APIResponse<String>.self, from: data)
+        if !apiResponse.isSuccess {
+            throw NSError(domain: "APIService", code: 500, userInfo: [NSLocalizedDescriptionKey: apiResponse.errorMsg ?? "清除远程缓存时发生未知错误"])
+        }
+    }
+    
+    // MARK: - Default TTS
+    func fetchDefaultTTS() async throws -> String {
+        guard !accessToken.isEmpty else {
+            throw NSError(domain: "APIService", code: 401, userInfo: [NSLocalizedDescriptionKey: "请先登录"])
+        }
+        let queryItems = [
+            URLQueryItem(name: "accessToken", value: accessToken)
+        ]
+        let (data, httpResponse) = try await requestWithFailback(endpoint: "getDefaultTTS", queryItems: queryItems)
+        guard httpResponse.statusCode == 200 else {
+            throw NSError(domain: "APIService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "获取默认TTS失败"])
+        }
+        let apiResponse = try JSONDecoder().decode(APIResponse<String>.self, from: data)
+        if apiResponse.isSuccess, let defaultTTSId = apiResponse.data {
+            return defaultTTSId
+        } else {
+            throw NSError(domain: "APIService", code: 500, userInfo: [NSLocalizedDescriptionKey: apiResponse.errorMsg ?? "获取默认TTS时发生未知错误"])
+        }
+    }
 }

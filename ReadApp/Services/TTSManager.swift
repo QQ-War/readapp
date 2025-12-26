@@ -615,7 +615,7 @@ class TTSManager: NSObject, ObservableObject {
 
     private func extractSpeaker(from sentence: String) -> String? {
         // 匹配“张三：”或“张三说：”等格式
-        let pattern = "^\s*([\p{Han}A-Za-z0-9_·]{1,12})[\s　]*[：:，,]?\s*[\"“]"
+        let pattern = "^\\s*([\\p{Han}A-Za-z0-9_·]{1,12})[\\s　]*[：:，,]?\\s*[\"“]"
         guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
         let range = NSRange(location: 0, length: sentence.utf16.count)
         if let match = regex.firstMatch(in: sentence, options: [], range: range),
