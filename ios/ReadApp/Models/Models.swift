@@ -138,6 +138,19 @@ struct UserInfo: Codable {
 }
 
 // MARK: - User Preferences
+enum ReadingMode: String, CaseIterable, Identifiable {
+    case vertical = "Vertical"
+    case horizontal = "Horizontal"
+
+    var id: String { self.rawValue }
+    var localizedName: String {
+        switch self {
+        case .vertical: return "上下滚动"
+        case .horizontal: return "左右翻页"
+        }
+    }
+}
+
 class UserPreferences: ObservableObject {
     static let shared = UserPreferences()
     
@@ -230,6 +243,12 @@ class UserPreferences: ObservableObject {
         }
     }
     
+    @Published var readingMode: ReadingMode {
+        didSet {
+            UserDefaults.standard.set(readingMode.rawValue, forKey: "readingMode")
+        }
+    }
+    
     // TTS进度记录：bookUrl -> (chapterIndex, sentenceIndex)
     private var ttsProgress: [String: (Int, Int)] {
         get {
@@ -287,6 +306,13 @@ class UserPreferences: ObservableObject {
 
         let savedPreloadCount = UserDefaults.standard.integer(forKey: "ttsPreloadCount")
         self.ttsPreloadCount = savedPreloadCount == 0 ? 10 : savedPreloadCount
+
+        if let savedReadingModeString = UserDefaults.standard.string(forKey: "readingMode"),
+           let savedReadingMode = ReadingMode(rawValue: savedReadingModeString) {
+            self.readingMode = savedReadingMode
+        } else {
+            self.readingMode = .vertical // Default value
+        }
 
         // 兼容旧版：如果没有单独设置旁白/对话 TTS，则使用原有的 selectedTTSId
         if narrationTTSId.isEmpty { narrationTTSId = selectedTTSId }

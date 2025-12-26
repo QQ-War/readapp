@@ -165,6 +165,8 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     val loggingEnabled: StateFlow<Boolean> = _loggingEnabled.asStateFlow()
     private val _bookshelfSortByRecent = MutableStateFlow(false)
     val bookshelfSortByRecent: StateFlow<Boolean> = _bookshelfSortByRecent.asStateFlow()
+    private val _readingMode = MutableStateFlow(com.readapp.data.ReadingMode.Vertical)
+    val readingMode: StateFlow<com.readapp.data.ReadingMode> = _readingMode.asStateFlow()
     private val _serverAddress = MutableStateFlow("http://127.0.0.1:8080/api/5")
     val serverAddress: StateFlow<String> = _serverAddress.asStateFlow()
     private val _publicServerAddress = MutableStateFlow("")
@@ -204,6 +206,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             _readingFontSize.value = preferences.readingFontSize.first()
             _loggingEnabled.value = preferences.loggingEnabled.first()
             _bookshelfSortByRecent.value = preferences.bookshelfSortByRecent.first()
+            _readingMode.value = preferences.readingMode.first()
 
             if (_accessToken.value.isNotBlank()) {
                 _isLoading.value = true
@@ -887,6 +890,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     fun updateReadingFontSize(size: Float) { _readingFontSize.value = size.coerceIn(12f, 28f); viewModelScope.launch { preferences.saveReadingFontSize(_readingFontSize.value) } }
     fun updateLoggingEnabled(enabled: Boolean) { _loggingEnabled.value = enabled; viewModelScope.launch { preferences.saveLoggingEnabled(enabled) } }
     fun updateBookshelfSortByRecent(enabled: Boolean) { _bookshelfSortByRecent.value = enabled; viewModelScope.launch { preferences.saveBookshelfSortByRecent(enabled); applyBooksFilterAndSort() } }
+    fun updateReadingMode(mode: com.readapp.data.ReadingMode) { _readingMode.value = mode; viewModelScope.launch { preferences.saveReadingMode(mode) } }
     fun clearCache() {
         viewModelScope.launch {
             clearAudioCache()

@@ -13,6 +13,11 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore by preferencesDataStore(name = "readapp2")
 
+enum class ReadingMode {
+    Vertical,
+    Horizontal
+}
+
 class UserPreferences(private val context: Context) {
 
     private object Keys {
@@ -25,6 +30,7 @@ class UserPreferences(private val context: Context) {
         val DialogueTtsId = stringPreferencesKey("dialogueTtsId")
         val SpeakerTtsMapping = stringPreferencesKey("speakerTtsMapping")
         val ReadingFontSize = floatPreferencesKey("readingFontSize")
+        val ReadingMode = stringPreferencesKey("readingMode")
         val SpeechRate = doublePreferencesKey("speechRate")
         val PreloadCount = floatPreferencesKey("preloadCount")
         val LoggingEnabled = stringPreferencesKey("loggingEnabled")
@@ -47,6 +53,15 @@ class UserPreferences(private val context: Context) {
     }
     val bookshelfSortByRecent: Flow<Boolean> = context.dataStore.data.map {
         it[Keys.BookshelfSortByRecent] ?: false
+    }
+    val readingMode: Flow<ReadingMode> = context.dataStore.data.map {
+        ReadingMode.valueOf(it[Keys.ReadingMode] ?: ReadingMode.Vertical.name)
+    }
+
+    suspend fun saveReadingMode(value: ReadingMode) {
+        context.dataStore.edit { prefs: MutablePreferences ->
+            prefs[Keys.ReadingMode] = value.name
+        }
     }
 
     suspend fun saveServerUrl(value: String) {

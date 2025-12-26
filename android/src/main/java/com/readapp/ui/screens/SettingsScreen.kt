@@ -34,6 +34,8 @@ fun SettingsScreen(
     preloadCount: Int,
     loggingEnabled: Boolean,
     bookshelfSortByRecent: Boolean,
+    readingMode: com.readapp.data.ReadingMode,
+    onReadingModeChange: (com.readapp.data.ReadingMode) -> Unit,
     onServerAddressChange: (String) -> Unit,
     onSelectTtsEngine: (String) -> Unit,
     onSelectNarrationTtsEngine: (String) -> Unit,
@@ -127,6 +129,43 @@ fun SettingsScreen(
                     onCheckedChange = onBookshelfSortByRecentChange
                 )
             }
+
+            // Reading Settings
+            SettingsSection(title = "阅读设置") {
+                Column(modifier = Modifier.padding(AppDimens.PaddingMedium)) {
+                    Text(
+                        text = "翻页模式",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable { onReadingModeChange(com.readapp.data.ReadingMode.Vertical) }
+                        ) {
+                            RadioButton(
+                                selected = readingMode == com.readapp.data.ReadingMode.Vertical,
+                                onClick = { onReadingModeChange(com.readapp.data.ReadingMode.Vertical) }
+                            )
+                            Text("上下滚动")
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable { onReadingModeChange(com.readapp.data.ReadingMode.Horizontal) }
+                        ) {
+                            RadioButton(
+                                selected = readingMode == com.readapp.data.ReadingMode.Horizontal,
+                                onClick = { onReadingModeChange(com.readapp.data.ReadingMode.Horizontal) }
+                            )
+                            Text("左右翻页")
+                        }
+                    }
+                }
+            }
+			
             
             // TTS 设置
             SettingsSection(title = "听书设置") {

@@ -18,6 +18,7 @@ struct ReadingView: View {
     @State private var showUIControls = true
     @State private var scrollProxy: ScrollViewProxy?
     @State private var lastTTSSentenceIndex: Int?
+    @State private var showFontSettings = false
     
     init(book: Book) {
         self.book = book
@@ -118,7 +119,8 @@ struct ReadingView: View {
                             onPreviousChapter: previousChapter,
                             onNextChapter: nextChapter,
                             onShowChapterList: { showChapterList = true },
-                            onToggleTTS: toggleTTS
+                            onToggleTTS: toggleTTS,
+                            onShowFontSettings: { showFontSettings = true }
                         )
                     }
                 }
@@ -146,6 +148,9 @@ struct ReadingView: View {
                     showChapterList = false
                 }
             )
+        }
+        .sheet(isPresented: $showFontSettings) {
+            FontSizeSheet(fontSize: $preferences.fontSize)
         }
         .task {
             await loadChapters()
@@ -541,6 +546,7 @@ struct NormalControlBar: View {
     let onNextChapter: () -> Void
     let onShowChapterList: () -> Void
     let onToggleTTS: () -> Void
+    let onShowFontSettings: () -> Void
     
     var body: some View {
         HStack(spacing: 30) {
@@ -568,7 +574,7 @@ struct NormalControlBar: View {
             }
             Spacer()
             
-            Button(action: { /* TODO: 字体设置 */ }) {
+            Button(action: onShowFontSettings) {
                 VStack(spacing: 4) {
                     Image(systemName: "textformat.size").font(.title2)
                     Text("字体").font(.caption2)
@@ -585,5 +591,32 @@ struct NormalControlBar: View {
         .padding(.horizontal, 20).padding(.vertical, 12)
         .background(Color(UIColor.systemBackground))
         .shadow(color: Color.black.opacity(0.1), radius: 5, y: -2)
+    }
+}
+
+struct FontSizeSheet: View {
+    @Binding var fontSize: CGFloat
+    @Environment(\.dismiss) var dismiss
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 16) {
+                Text("字体大小")
+                    .font(.headline)
+                Text(String(format: "%.0f", fontSize))
+                    .font(.system(size: 28, weight: .semibold))
+                Slider(value: $fontSize, in: 12...30, step: 1)
+                Spacer()
+            }
+            .padding(20)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("完成") {
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }

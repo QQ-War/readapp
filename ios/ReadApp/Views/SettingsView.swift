@@ -153,6 +153,12 @@ struct SettingsView: View {
                 Text("\(Int(preferences.lineSpacing))")
             }
             Slider(value: $preferences.lineSpacing, in: 4...20, step: 2)
+            
+            Picker("阅读模式", selection: $preferences.readingMode) {
+                ForEach(ReadingMode.allCases) { mode in
+                    Text(mode.localizedName).tag(mode)
+                }
+            }
         }
     }
 

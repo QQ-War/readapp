@@ -125,6 +125,7 @@ fun ReadAppMain() {
                 val isContentLoading by bookViewModel.isChapterContentLoading.collectAsState()
                 val readingFontSize by bookViewModel.readingFontSize.collectAsState()
                 val errorMessage by bookViewModel.errorMessage.collectAsState()
+                val readingMode by bookViewModel.readingMode.collectAsState()
 
                 // TTS 状态
                 val isPlaying by bookViewModel.isPlaying.collectAsState()
@@ -141,6 +142,7 @@ fun ReadAppMain() {
                         isContentLoading = isContentLoading,
                         readingFontSize = readingFontSize,
                         errorMessage = errorMessage,
+                        readingMode = readingMode,
                         onClearError = { bookViewModel.clearError() },
                         onChapterClick = { index ->
                             bookViewModel.setCurrentChapter(index)
@@ -197,6 +199,7 @@ fun ReadAppMain() {
                 val preloadCount by bookViewModel.preloadCount.collectAsState()
                 val loggingEnabled by bookViewModel.loggingEnabled.collectAsState()
                 val bookshelfSortByRecent by bookViewModel.bookshelfSortByRecent.collectAsState()
+                val readingMode by bookViewModel.readingMode.collectAsState()
 
                 SettingsScreen(
                     serverAddress = serverAddress,
@@ -210,6 +213,8 @@ fun ReadAppMain() {
                     preloadCount = preloadCount,
                     loggingEnabled = loggingEnabled,
                     bookshelfSortByRecent = bookshelfSortByRecent,
+                    readingMode = readingMode,
+                    onReadingModeChange = bookViewModel::updateReadingMode,
                     onServerAddressChange = { bookViewModel.updateServerAddress(it) },
                     onSelectTtsEngine = { bookViewModel.selectTtsEngine(it) },
                     onSelectNarrationTtsEngine = { bookViewModel.selectNarrationTtsEngine(it) },

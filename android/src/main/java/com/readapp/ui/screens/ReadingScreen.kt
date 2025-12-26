@@ -29,6 +29,15 @@ import com.readapp.data.model.Chapter
 import com.readapp.ui.theme.AppDimens
 import com.readapp.ui.theme.customColors
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import com.readapp.data.ReadingMode
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.foundation.layout.BoxWithConstraints
 
 @Composable
 fun ReadingScreen(
@@ -55,6 +64,7 @@ fun ReadingScreen(
     onNextParagraph: () -> Unit = {},
     onReadingFontSizeChange: (Float) -> Unit = {},
     onExit: () -> Unit = {},
+    readingMode: com.readapp.data.ReadingMode = com.readapp.data.ReadingMode.Vertical,
     modifier: Modifier = Modifier
 ) {
     var showControls by remember { mutableStateOf(false) }
@@ -139,71 +149,113 @@ fun ReadingScreen(
                 }
         ) {
             // 内容区域
-            LazyColumn(
-                state = scrollState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .weight(1f),
-                contentPadding = PaddingValues(
-                    start = AppDimens.PaddingLarge,
-                    end = AppDimens.PaddingLarge,
-                    top = if (showControls) 80.dp else AppDimens.PaddingLarge,
-                    bottom = if (showControls) 120.dp else AppDimens.PaddingLarge
-                )
-            ) {
-                // 章节标题
-                item {
-                    Text(
-                        text = if (currentChapterIndex < chapters.size) {
-                            chapters[currentChapterIndex].title
-                        } else {
-                            "章节"
-                        },
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(bottom = AppDimens.PaddingLarge)
+            if (readingMode == com.readapp.data.ReadingMode.Vertical) {
+                LazyColumn(
+                    state = scrollState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .weight(1f),
+                    contentPadding = PaddingValues(
+                        start = AppDimens.PaddingLarge,
+                        end = AppDimens.PaddingLarge,
+                        top = if (showControls) 80.dp else AppDimens.PaddingLarge,
+                        bottom = if (showControls) 120.dp else AppDimens.PaddingLarge
                     )
-                }
-
-                if (paragraphs.isEmpty()) {
+                ) {
+                    // 章节标题
                     item {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = AppDimens.PaddingLarge),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            if (isContentLoading) {
-                                CircularProgressIndicator()
-                                Text(
-                                    text = "正在加载章节内容...",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.customColors.textSecondary,
-                                    textAlign = TextAlign.Center
-                                )
+                        Text(
+                            text = if (currentChapterIndex < chapters.size) {
+                                chapters[currentChapterIndex].title
                             } else {
+                                "章节"
+                            },
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(bottom = AppDimens.PaddingLarge)
+                        )
+                    }
+
+                    if (paragraphs.isEmpty()) {
+                        item {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = AppDimens.PaddingLarge),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                if (isContentLoading) {
+                                    CircularProgressIndicator()
+                                    Text(
+                                        text = "正在加载章节内容...",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.customColors.textSecondary,
+                                        textAlign = TextAlign.Center
+                                    )
+                                } else {
+                                    Text(
+                                        text = displayContent.ifBlank { "暂无可显示的内容" },
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.customColors.textSecondary,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        // 章节内容（分段显示，带高亮）
+                        itemsIndexed(paragraphs) { index, paragraph ->
+                            ParagraphItem(
+                                text = paragraph,
+                                isPlaying = index == currentPlayingParagraph,
+                                isPreloaded = preloadedParagraphs.contains(index),
+                                fontSize = readingFontSize,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = AppDimens.PaddingMedium)
+                            )
+                        }
+                    }
+                }
+            } else {
+                BoxWithConstraints(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .weight(1f)
+                ) {
+                    val style = MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = readingFontSize.sp,
+                        lineHeight = (readingFontSize * 1.8f).sp
+                    )
+                    
+                    val paginatedText = rememberPaginatedText(
+                        text = displayContent,
+                        style = style,
+                        constraints = constraints
+                    )
+
+                    HorizontalPager(
+                        state = rememberPagerState { paginatedText.size },
+                        modifier = Modifier.fillMaxSize()
+                    ) { page ->
+                        val pageText = paginatedText.getOrNull(page) ?: ""
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(
+                                start = AppDimens.PaddingLarge,
+                                end = AppDimens.PaddingLarge,
+                                top = if (showControls) 80.dp else AppDimens.PaddingLarge,
+                                bottom = if (showControls) 120.dp else AppDimens.PaddingLarge
+                            )
+                        ) {
+                            item {
                                 Text(
-                                    text = displayContent.ifBlank { "暂无可显示的内容" },
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.customColors.textSecondary,
-                                    textAlign = TextAlign.Center
+                                    text = pageText,
+                                    style = style
                                 )
                             }
                         }
-                    }
-                } else {
-                    // 章节内容（分段显示，带高亮）
-                    itemsIndexed(paragraphs) { index, paragraph ->
-                        ParagraphItem(
-                            text = paragraph,
-                            isPlaying = index == currentPlayingParagraph,
-                            isPreloaded = preloadedParagraphs.contains(index),
-                            fontSize = readingFontSize,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = AppDimens.PaddingMedium)
-                        )
                     }
                 }
             }
@@ -324,78 +376,62 @@ private fun ParagraphItem(
         isPreloaded -> MaterialTheme.customColors.success.copy(alpha = 0.15f)  // 已预载：浅绿色标记
         else -> Color.Transparent
     }
-    val contentParts = remember(text) { parseParagraphContent(text) }
     
     Surface(
         modifier = modifier,
         color = backgroundColor,
         shape = RoundedCornerShape(8.dp)
     ) {
-        Column(
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyLarge.copy(fontSize = fontSize.sp),
+            color = MaterialTheme.colorScheme.onSurface,
+            lineHeight = (fontSize * 1.8f).sp,
             modifier = Modifier.padding(
                 horizontal = if (isPlaying || isPreloaded) 12.dp else 0.dp,
                 vertical = if (isPlaying || isPreloaded) 8.dp else 0.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            contentParts.forEach { part ->
-                when (part) {
-                    is ParagraphContent.Image -> {
-                        AsyncImage(
-                            model = part.url,
-                            contentDescription = "章节插图",
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(6.dp))
-                        )
-                    }
-                    is ParagraphContent.Text -> {
-                        Text(
-                            text = part.value,
-                            style = MaterialTheme.typography.bodyLarge.copy(fontSize = fontSize.sp),
-                            color = MaterialTheme.colorScheme.onSurface,
-                            lineHeight = (fontSize * 1.8f).sp
-                        )
-                    }
-                }
+            )
+        )
+    }
+}
+
+
+
+@Composable
+private fun rememberPaginatedText(
+    text: String,
+    style: TextStyle,
+    constraints: Constraints
+): List<String> {
+    val textMeasurer = rememberTextMeasurer()
+
+    return remember(text, style, constraints) {
+        if (text.isEmpty() || constraints.maxWidth == 0 || constraints.maxHeight == 0) {
+            return@remember emptyList()
+        }
+
+        val pages = mutableListOf<String>()
+        var currentOffset = 0
+
+        while (currentOffset < text.length) {
+            val result = textMeasurer.measure(
+                text = AnnotatedString(text.substring(currentOffset)),
+                style = style,
+                constraints = Constraints(
+                    maxWidth = constraints.maxWidth,
+                    maxHeight = constraints.maxHeight
+                )
+            )
+
+            val endOffset = currentOffset + result.characterCount
+            if (endOffset <= currentOffset) {
+                break
             }
+            pages.add(text.substring(currentOffset, endOffset))
+            currentOffset = endOffset
         }
+        pages
     }
-}
-
-private sealed interface ParagraphContent {
-    data class Text(val value: String) : ParagraphContent
-    data class Image(val url: String) : ParagraphContent
-}
-
-private fun parseParagraphContent(text: String): List<ParagraphContent> {
-    val imgRegex = "(?i)<img[^>]*src=[\"']([^\"']+)[\"'][^>]*>".toRegex()
-    val parts = mutableListOf<ParagraphContent>()
-    var cursor = 0
-    val tagRegex = "(?is)<[^>]+>".toRegex()
-
-    imgRegex.findAll(text).forEach { match ->
-        val start = match.range.first
-        val before = text.substring(cursor, start)
-        val cleanedBefore = before.replace(tagRegex, "").trim()
-        if (cleanedBefore.isNotBlank()) {
-            parts.add(ParagraphContent.Text(cleanedBefore))
-        }
-        val url = match.groups[1]?.value
-        if (!url.isNullOrBlank()) {
-            parts.add(ParagraphContent.Image(url))
-        }
-        cursor = match.range.last + 1
-    }
-
-    val tail = text.substring(cursor)
-    val cleanedTail = tail.replace(tagRegex, "").trim()
-    if (cleanedTail.isNotBlank()) {
-        parts.add(ParagraphContent.Text(cleanedTail))
-    }
-
-    return parts.ifEmpty { listOf(ParagraphContent.Text(text.trim())) }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
