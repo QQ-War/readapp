@@ -1,39 +1,35 @@
 # ReadApp Android
 
-这是一个基于 Jetpack Compose 的轻阅读第三方 Android 客户端移植版本，复用与 iOS 端一致的后端 API（/api/5）。目前提供登录、服务器地址配置、书架浏览、章节阅读与 HTTP TTS 朗读，并保留与 iOS 相同的公网/局域网双地址回退策略。
+Android 客户端基于 Jetpack Compose，实现了轻阅读后端（`/api/5`）的主要能力，聚焦段落级听书与阅读体验。
 
-## 已实现
-- 账号密码登录（支持公网备选地址自动回退）
-- 服务器地址与访问令牌的 DataStore 本地持久化
-- 书架列表展示、手动刷新
-- 章节目录加载与章节正文阅读
-- HTTP TTS 朗读当前章节（可选引擎、语速与预载章节数）
-- TTS 播放使用 MediaSession 前台服务，支持后台播放与锁屏媒体控制
-- 听书体验：支持段落分段朗读、段落高亮、章节名朗读、段落级进度条与跳转、预载章节提示色块
-- 沉浸模式与段落列表阅读视图，可配合耳机拔出自动暂停
-- 段落末尾预载提示与即将跳转下一章的高亮标记，章节 nearing 结束时自动预取下一章并平滑衔接朗读
-- 动态段落背景与渐变高亮，沉浸模式下仍保留段落焦点动画与预载提示
-- 书架工具：搜索、最近阅读排序、正序/倒序切换与缓存清理入口
-- Compose Material 3 轻量化 UI 主题
-- 阅读偏好：字体大小、行间距调节与“最近阅读排序”开关（DataStore 持久化）
-
-## 与 iOS 版的差异（尚未移植）
-- 书架工具：尚缺服务端缓存清理/同步诊断，已支持搜索、正序/倒序切换与最近阅读排序。
-- 阅读与听书体验：仍缺少 iOS 的段落级沉浸动画特效与更多自定义主题，但已补齐预载提示、章节末尾高亮跳转与动态段落背景。
-- 系统整合：已支持耳机拔出自动暂停、音频焦点恢复自动续播与 MediaSession 控制，但缺少蓝牙耳机自定义按键映射等深度整合。
-- 调试与缓存管理：iOS 提供日志导出/清空、本地章节缓存清除等工具；安卓端暂无日志导出或缓存清理界面。
+## 环境要求
+- Android Studio Hedgehog 或更高版本
+- JDK 17
+- Android SDK 34
 
 ## 目录结构
-- `src/main/java/com/readapp/data/model`：数据模型，与 iOS 端字段保持一致
-- `src/main/java/com/readapp/data`：Retrofit API 定义、回退仓库、DataStore 封装
+- `src/main/java/com/readapp/data/model`：数据模型
+- `src/main/java/com/readapp/data`：API 与本地持久化（DataStore）
 - `src/main/java/com/readapp/media`：播放服务、播放器管理、TTS 预加载与缓存
-- `src/main/java/com/readapp/viewmodel`：书籍、阅读、设置等 ViewModel
-- `src/main/java/com/readapp/ui`：主界面、导航、界面状态
-- `src/main/java/com/readapp/ui/screens`：登录、书架与阅读界面
-- `src/main/java/com/readapp/ui/theme`：Compose 主题定义
+- `src/main/java/com/readapp/viewmodel`：阅读/书架/设置等状态管理
+- `src/main/java/com/readapp/ui`：界面与导航
+- `src/main/java/com/readapp/ui/screens`：页面实现
+- `src/main/java/com/readapp/ui/theme`：主题与样式
 
 ## 运行
-1. 使用 Android Studio Hedgehog 或更高版本打开 `android` 目录。
-2. 在 `build.gradle.kts` 中已启用 Compose 与所需依赖，首次同步会自动下载。
-3. 运行前在登录页填写服务器地址（默认 `http://127.0.0.1:8080/api/5`），如有公网地址可同时填写，保存后登录即可刷新书架。
-4. CI 生成的 `apk` 位于 `android/build/outputs/apk/`，使用 Android 默认 debug keystore 进行签名，可直接在设备上安装验证。
+1. 使用 Android Studio 打开 `android/`。
+2. 同步 Gradle 依赖后直接运行 Debug。
+3. 首次启动在登录页配置服务端地址与 accessToken。
+
+## 构建
+- Debug APK：`./gradlew assembleDebug`
+- Unsigned APK：`./gradlew assembleUnsigned`
+- 输出目录：`android/build/outputs/apk/`
+
+## 功能说明
+- 登录与服务端配置（支持内外网回退）
+- 书架、章节与阅读页
+- HTTP TTS 段落级播放
+- 播放进度与段落高亮
+- 预加载与缓存策略，减少段落切换卡顿
+- 后台播放与系统媒体控制
