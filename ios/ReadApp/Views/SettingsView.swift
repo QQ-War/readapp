@@ -14,80 +14,81 @@ struct SettingsView: View {
     @State private var showClearCacheAlert = false
 
     var body: some View {
-        NavigationView {
-            Form {
-                userSection
-                readingSection
-                ttsSection
-                replaceRuleSection
-                bookshelfSection
-                debugSection
-                footerSection
+        Form {
+            userSection
+            readingSection
+            ttsSection
+            replaceRuleSection
+            bookshelfSection
+            debugSection
+            footerSection
+        }
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("设置")
+                    .font(.headline)
             }
-            .navigationTitle("设置")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("完成") {
-                        dismiss()
-                    }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button("完成") {
+                    dismiss()
                 }
             }
-            .sheet(isPresented: $showTTSSelection) {
-                TTSSelectionView()
-                    .environmentObject(apiService)
+        }
+        .sheet(isPresented: $showTTSSelection) {
+            TTSSelectionView()
+                .environmentObject(apiService)
+        }
+        .alert("退出登录", isPresented: $showLogoutAlert) {
+            Button("取消", role: .cancel) { }
+            Button("退出", role: .destructive) {
+                handleLogout()
             }
-            .alert("退出登录", isPresented: $showLogoutAlert) {
-                Button("取消", role: .cancel) { }
-                Button("退出", role: .destructive) {
-                    handleLogout()
-                }
-            } message: {
-                Text("确定要退出登录吗？")
+        } message: {
+            Text("确定要退出登录吗？")
+        }
+        .alert("清空日志", isPresented: $showClearLogsAlert) {
+            Button("取消", role: .cancel) { }
+            Button("清空", role: .destructive) {
+                LogManager.shared.clearLogs()
             }
-            .alert("清空日志", isPresented: $showClearLogsAlert) {
-                Button("取消", role: .cancel) { }
-                Button("清空", role: .destructive) {
-                    LogManager.shared.clearLogs()
-                }
-            } message: {
-                Text("确定要清空所有日志吗？")
+        } message: {
+            Text("确定要清空所有日志吗？")
+        }
+        .alert("清除本地缓存", isPresented: $showClearCacheAlert) {
+            Button("取消", role: .cancel) { }
+            Button("清除", role: .destructive) {
+                apiService.clearLocalCache()
             }
-            .alert("清除本地缓存", isPresented: $showClearCacheAlert) {
-                Button("取消", role: .cancel) { }
-                Button("清除", role: .destructive) {
-                    apiService.clearLocalCache()
-                }
-            } message: {
-                Text("确定要清除所有本地章节内容缓存吗？")
+        } message: {
+            Text("确定要清除所有本地章节内容缓存吗？")
+        }
+        .sheet(isPresented: $showShareSheet) {
+            if let url = logFileURL {
+                ShareSheet(items: [url])
             }
-            .sheet(isPresented: $showShareSheet) {
-                if let url = logFileURL {
-                    ShareSheet(items: [url])
-                }
-            }
-            .task {
+        }
+        .task {
+            await loadTTSName()
+        }
+        .onChange(of: preferences.selectedTTSId) { _ in
+            Task {
                 await loadTTSName()
             }
-            .onChange(of: preferences.selectedTTSId) { _ in
-                Task {
-                    await loadTTSName()
-                }
+        }
+        .onChange(of: preferences.narrationTTSId) { _ in
+            Task {
+                await loadTTSName()
             }
-            .onChange(of: preferences.narrationTTSId) { _ in
-                Task {
-                    await loadTTSName()
-                }
+        }
+        .onChange(of: preferences.dialogueTTSId) { _ in
+            Task {
+                await loadTTSName()
             }
-            .onChange(of: preferences.dialogueTTSId) { _ in
-                Task {
-                    await loadTTSName()
-                }
-            }
-            .onChange(of: preferences.speakerTTSMapping) { _ in
-                Task {
-                    await loadTTSName()
-                }
+        }
+        .onChange(of: preferences.speakerTTSMapping) { _ in
+            Task {
+                await loadTTSName()
             }
         }
     }
