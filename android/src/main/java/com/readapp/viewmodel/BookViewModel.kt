@@ -1,4 +1,4 @@
-package com.readapp.viewmodel
+﻿package com.readapp.viewmodel
 
 import android.app.Application
 import android.net.Uri
@@ -79,7 +79,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     private val preloadingIndices = mutableSetOf<Int>()
     private var preloadJob: Job? = null
 
-    // ==================== 书籍相关状�?====================
+    // ==================== 涔︾睄鐩稿叧鐘舵€?====================
 
     private var currentSentences: List<String> = emptyList()
     private var currentParagraphs: List<String> = emptyList()
@@ -107,7 +107,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     val currentChapterTitle: String
         get() = _chapters.value.getOrNull(_currentChapterIndex.value)?.title ?: ""
 
-    // ==================== 段落相关状�?====================
+    // ==================== 娈佃惤鐩稿叧鐘舵€?====================
 
     private val _currentParagraphIndex = MutableStateFlow(-1)
     val currentParagraphIndex: StateFlow<Int> = _currentParagraphIndex.asStateFlow()
@@ -120,7 +120,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     private val _preloadedChapters = MutableStateFlow<Set<Int>>(emptySet())
     val preloadedChapters: StateFlow<Set<Int>> = _preloadedChapters.asStateFlow()
 
-    // ==================== TTS 播放状�?====================
+    // ==================== TTS 鎾斁鐘舵€?====================
 
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
@@ -138,12 +138,12 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     private val _playbackProgress = MutableStateFlow(0f)
     val playbackProgress: StateFlow<Float> = _playbackProgress.asStateFlow()
 
-    // ==================== 净化规则状�?====================
+    // ==================== 鍑€鍖栬鍒欑姸鎬?====================
 
     private val _replaceRules = MutableStateFlow<List<ReplaceRule>>(emptyList())
     val replaceRules: StateFlow<List<ReplaceRule>> = _replaceRules.asStateFlow()
 
-    // ==================== TTS 设置 & 其他 ====================
+    // ==================== TTS 璁剧疆 & 鍏朵粬 ====================
     // (No changes in this section, keeping it compact)
     private val _selectedTtsEngine = MutableStateFlow("")
     val selectedTtsEngine: StateFlow<String> = _selectedTtsEngine.asStateFlow()
@@ -186,7 +186,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearError() { _errorMessage.value = null }
 
-    // ==================== 初始�?====================
+    // ==================== 鍒濆鍖?====================
 
     init {
         viewModelScope.launch {
@@ -238,7 +238,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
 
         override fun onPlayerError(error: PlaybackException) {
             appendLog("TTS player error: ${error.errorCodeName} ${error.message}")
-            _errorMessage.value = "播放失败: ${error.errorCodeName}"
+            _errorMessage.value = "鎾斁澶辫触: ${error.errorCodeName}"
             if (_keepPlaying.value) {
                 viewModelScope.launch {
                     delay(500)
@@ -248,7 +248,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // ==================== TTS 控制方法 ====================
+    // ==================== TTS 鎺у埗鏂规硶 ====================
 
     fun togglePlayPause() {
         if (_selectedBook.value == null) return
@@ -272,7 +272,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             _isChapterContentLoading.value = false
 
             if (content.isNullOrBlank()) {
-                _errorMessage.value = "当前章节内容为空，无法开始朗�?
+                _errorMessage.value = "Current chapter content is empty; cannot start playback."
                 return@launch
             }
 
@@ -300,7 +300,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             _currentParagraphIndex.value = index
 
             if (index < 0 || index >= currentSentences.size) {
-                appendLog("朗读完毕或索引无效，停止播放. Index: $index, Sentences: ${currentSentences.size}")
+                appendLog("鏈楄瀹屾瘯鎴栫储寮曟棤鏁堬紝鍋滄鎾斁. Index: $index, Sentences: ${currentSentences.size}")
                 stopPlayback("finished")
                 return@launch
             }
@@ -313,14 +313,14 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
                 val audioUrl = sentence?.let { buildTtsAudioUrl(it, false) }
 
                 if (audioUrl == null) {
-                    _errorMessage.value = "无法生成TTS链接，请检查TTS设置"
+                    _errorMessage.value = "鏃犳硶鐢熸垚TTS閾炬帴锛岃妫€鏌TS璁剧疆"
                     stopPlayback("error")
                     return@launch
                 }
 
                 val data = fetchAudioBytes(audioUrl)
                 if (data == null) {
-                    _errorMessage.value = "TTS音频下载失败"
+                    _errorMessage.value = "TTS闊抽涓嬭浇澶辫触"
                     stopPlayback("error")
                     return@launch
                 }
@@ -463,7 +463,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         resetPlayback()
     }
 
-    // ==================== 净化规则状�?====================
+    // ==================== 鍑€鍖栬鍒欑姸鎬?====================
 
     fun loadReplaceRules() {
         viewModelScope.launch {
@@ -474,7 +474,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             ).onSuccess {
                 _replaceRules.value = it
             }.onFailure {
-                _errorMessage.value = "加载净化规则失�? ${it.message}"
+                _errorMessage.value = "鍔犺浇鍑€鍖栬鍒欏け璐? ${it.message}"
             }
         }
     }
@@ -489,7 +489,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             ).onSuccess {
                 loadReplaceRules()
             }.onFailure {
-                _errorMessage.value = "添加规则失败: ${it.message}"
+                _errorMessage.value = "娣诲姞瑙勫垯澶辫触: ${it.message}"
             }
         }
     }
@@ -504,7 +504,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             ).onSuccess {
                 loadReplaceRules()
             }.onFailure {
-                _errorMessage.value = "删除规则失败: ${it.message}"
+                _errorMessage.value = "鍒犻櫎瑙勫垯澶辫触: ${it.message}"
             }
         }
     }
@@ -522,7 +522,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
                 _replaceRules.value = updatedRules
                 loadReplaceRules()
             }.onFailure {
-                _errorMessage.value = "切换规则状态失�? ${it.message}"
+                _errorMessage.value = "鍒囨崲瑙勫垯鐘舵€佸け璐? ${it.message}"
             }
         }
     }
@@ -563,7 +563,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // ==================== 清理 ====================
+    // ==================== 娓呯悊 ====================
 
     override fun onCleared() {
         super.onCleared()
@@ -596,7 +596,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
                 progress,
                 title
             ).onFailure { error ->
-                Log.w(TAG, "保存阅读进度失败: ${error.message}", error)
+                Log.w(TAG, "淇濆瓨闃呰杩涘害澶辫触: ${error.message}", error)
             }
         }
     }
@@ -701,7 +701,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         if (_selectedBook.value?.bookUrl == book.bookUrl) return
         stopPlayback("book_change")
         _selectedBook.value = book
-        appendLog("选择书籍: ${book.name.orEmpty()} (${book.bookUrl.orEmpty()})")
+        appendLog("閫夋嫨涔︾睄: ${book.name.orEmpty()} (${book.bookUrl.orEmpty()})")
         _currentChapterIndex.value = book.durChapterIndex ?: 0
         _currentParagraphIndex.value = book.durChapterProgress ?: -1
         _currentChapterContent.value = ""
@@ -714,7 +714,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     fun setCurrentChapter(index: Int) {
         if (index !in _chapters.value.indices) return
         val chapterTitle = _chapters.value.getOrNull(index)?.title.orEmpty()
-        appendLog("切换章节: index=$index title=$chapterTitle")
+        appendLog("鍒囨崲绔犺妭: index=$index title=$chapterTitle")
         val shouldContinuePlaying = _keepPlaying.value
         stopPlayback("chapter_change")
         _currentChapterIndex.value = index
@@ -746,17 +746,17 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun loadChapters(book: Book) {
         val bookUrl = book.bookUrl ?: return
         _isChapterListLoading.value = true
-        appendLog("加载章节列表: bookUrl=$bookUrl source=${book.origin.orEmpty()}")
+        appendLog("鍔犺浇绔犺妭鍒楄〃: bookUrl=$bookUrl source=${book.origin.orEmpty()}")
         val chaptersResult = runCatching { repository.fetchChapterList(currentServerEndpoint(), _publicServerAddress.value.ifBlank { null }, _accessToken.value, bookUrl, book.origin) }
             .getOrElse { throwable ->
                 _errorMessage.value = throwable.message
-                Log.e(TAG, "加载章节列表失败", throwable)
+                Log.e(TAG, "鍔犺浇绔犺妭鍒楄〃澶辫触", throwable)
                 _isChapterListLoading.value = false
                 return
             }
         chaptersResult.onSuccess { chapterList ->
             _chapters.value = chapterList
-            appendLog("章节列表加载成功: ${chapterList.size} �?)
+            appendLog("Chapter list loaded: ${chapterList.size} items")
             if (chapterList.isNotEmpty()) {
                 val index = _currentChapterIndex.value.coerceIn(0, chapterList.lastIndex)
                 _currentChapterIndex.value = index
@@ -765,53 +765,53 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             _isChapterListLoading.value = false
         }.onFailure { error ->
             _errorMessage.value = error.message
-            appendLog("章节列表加载失败: ${error.message.orEmpty()}")
-            Log.e(TAG, "加载章节列表失败", error)
+            appendLog("绔犺妭鍒楄〃鍔犺浇澶辫触: ${error.message.orEmpty()}")
+            Log.e(TAG, "鍔犺浇绔犺妭鍒楄〃澶辫触", error)
             _isChapterListLoading.value = false
         }
     }
 
-    fun loadChapterContent(index: Int) { viewModelScope.launch { appendLog("触发加载章节内容: index=$index"); loadChapterContentInternal(index) } }
+    fun loadChapterContent(index: Int) { viewModelScope.launch { appendLog("瑙﹀彂鍔犺浇绔犺妭鍐呭: index=$index"); loadChapterContentInternal(index) } }
     fun onChapterChange(index: Int) { setCurrentChapter(index) }
     private suspend fun loadChapterContentInternal(index: Int): String? {
-        appendLog("进入loadChapterContentInternal: index=$index")
+        appendLog("杩涘叆loadChapterContentInternal: index=$index")
         val book = _selectedBook.value ?: return null
         val chapter = _chapters.value.getOrNull(index) ?: return null
         val bookUrl = book.bookUrl ?: return null
         val cachedInMemory = chapterContentCache[index]
         if (!cachedInMemory.isNullOrBlank()) {
-            appendLog("章节内容命中内存缓存: index=$index")
+            appendLog("绔犺妭鍐呭鍛戒腑鍐呭瓨缂撳瓨: index=$index")
             updateChapterContent(index, cachedInMemory)
             return cachedInMemory
         }
         if (_isChapterContentLoading.value) {
-            appendLog("章节内容加载中，跳过请求: index=$index")
+            appendLog("绔犺妭鍐呭鍔犺浇涓紝璺宠繃璇锋眰: index=$index")
             return _currentChapterContent.value.ifBlank { null }
         }
         _isChapterContentLoading.value = true
-        appendLog("开始请求章节内�? index=$index url=${chapter.url}")
+        appendLog("寮€濮嬭姹傜珷鑺傚唴瀹? index=$index url=${chapter.url}")
         return try {
             val result = repository.fetchChapterContent(currentServerEndpoint(), _publicServerAddress.value.ifBlank { null }, _accessToken.value, bookUrl, book.origin, chapter.index)
             result.onSuccess { content ->
-                appendLog("章节内容原文: index=$index length=${content.orEmpty().length}")
+                appendLog("绔犺妭鍐呭鍘熸枃: index=$index length=${content.orEmpty().length}")
                 val cleaned = cleanChapterContent(content.orEmpty())
                 val resolved = when {
                     cleaned.isNotBlank() -> cleaned
                     content.orEmpty().isNotBlank() -> content.orEmpty().trim()
-                    else -> "章节内容为空"
+                    else -> "绔犺妭鍐呭涓虹┖"
                 }
-                appendLog("章节内容清洗�? index=$index length=${resolved.length}")
+                appendLog("绔犺妭鍐呭娓呮礂鍚? index=$index length=${resolved.length}")
                 updateChapterContent(index, resolved)
             }.onFailure { error ->
-                _errorMessage.value = "加载失败: ${error.message}".trim()
-                appendLog("章节内容加载失败: index=$index error=${error.message.orEmpty()}")
-                Log.e(TAG, "加载章节内容失败", error)
+                _errorMessage.value = "鍔犺浇澶辫触: ${error.message}".trim()
+                appendLog("绔犺妭鍐呭鍔犺浇澶辫触: index=$index error=${error.message.orEmpty()}")
+                Log.e(TAG, "鍔犺浇绔犺妭鍐呭澶辫触", error)
             }
             _currentChapterContent.value
         } catch (e: Exception) {
-            _errorMessage.value = "系统异常: ${e.localizedMessage}".trim()
-            appendLog("章节内容加载异常: index=$index error=${e.localizedMessage.orEmpty()}")
-            Log.e(TAG, "加载章节内容异常", e)
+            _errorMessage.value = "绯荤粺寮傚父: ${e.localizedMessage}".trim()
+            appendLog("绔犺妭鍐呭鍔犺浇寮傚父: index=$index error=${e.localizedMessage.orEmpty()}")
+            Log.e(TAG, "鍔犺浇绔犺妭鍐呭寮傚父", e)
             null
         } finally {
             _isChapterContentLoading.value = false
@@ -833,7 +833,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 content = content.replace(Regex(rule.pattern), rule.replacement)
             } catch (e: Exception) {
-                Log.w(TAG, "净化规则执行失�? ${rule.name}", e)
+                Log.w(TAG, "鍑€鍖栬鍒欐墽琛屽け璐? ${rule.name}", e)
             }
         }
 
@@ -905,7 +905,7 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         }.map { it.second } else filtered
         _books.value = sorted
     }
-    private fun isPunctuationOnly(sentence: String): Boolean = sentence.trim().all { it in "，。！？；、“”\"'…�?· " }
+    private fun isPunctuationOnly(sentence: String): Boolean = sentence.trim().all { it in "锛屻€傦紒锛燂紱銆佲€溾€漒"'鈥︹€?路 " }
     private fun parseSpeakerMapping(raw: String): Map<String, String> { if (raw.isBlank()) return emptyMap(); return runCatching { val obj = JSONObject(raw); obj.keys().asSequence().associateWith { key -> obj.optString(key) } }.getOrDefault(emptyMap()) }
     private fun serializeSpeakerMapping(mapping: Map<String, String>): String { val obj = JSONObject(); mapping.forEach { (key, value) -> obj.put(key, value) }; return obj.toString() }
     fun exportLogs(context: android.content.Context): android.net.Uri? { if (!logFile.exists()) return null; return runCatching { val exportFile = File(context.cacheDir, LOG_EXPORT_NAME); logFile.copyTo(exportFile, overwrite = true); androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", exportFile) }.getOrNull() }
@@ -939,4 +939,5 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 }
+
 
