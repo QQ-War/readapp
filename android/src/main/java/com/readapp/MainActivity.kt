@@ -228,7 +228,7 @@ fun ReadAppMain() {
                     onExportLogs = {
                         val uri = bookViewModel.exportLogs(context)
                         if (uri == null) {
-                            Toast.makeText(context, "暂无日志可导出", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "No logs to export", Toast.LENGTH_SHORT).show()
                         } else {
                             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                                 type = "text/plain"
@@ -241,7 +241,7 @@ fun ReadAppMain() {
                     },
                     onClearLogs = {
                         bookViewModel.clearLogs()
-                        Toast.makeText(context, "历史日志已清除", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Logs cleared", Toast.LENGTH_SHORT).show()
                     },
                     onLoggingEnabledChange = { enabled ->
                         bookViewModel.updateLoggingEnabled(enabled)

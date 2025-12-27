@@ -24,27 +24,42 @@ class ReadAudioService : MediaSessionService() {
     private lateinit var player: ExoPlayer
 
     private inner class TtsMediaSessionCallback : MediaSession.Callback {
-        override fun onSetMediaItem(
+        override fun onAddMediaItems(
             mediaSession: MediaSession,
             controller: MediaSession.ControllerInfo,
-            mediaItem: MediaItem
-        ): ListenableFuture<MediaSession.ConnectionResult> {
-            val audioData = AudioCache.get(mediaItem.mediaId)
-            if (audioData != null) {
-                val dataSourceFactory = DataSource.Factory { ByteArrayDataSource(audioData) }
-                val mediaSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                    .createMediaSource(mediaItem)
-                player.setMediaSource(mediaSource)
-            } else {
-                // If data is not in cache, we can't play it.
-                // The ViewModel is responsible for putting it there first.
-                // We'll just prepare the player with an empty source to avoid errors.
-                player.clearMediaItems()
-            }
-            return Futures.immediateFuture(MediaSession.ConnectionResult.accept())
+            mediaItems: List<MediaItem>
+        ): ListenableFuture<List<MediaItem>> {
+            mediaItems.firstOrNull()?.let { prepareFromCache(it) }
+            return Futures.immediateFuture(mediaItems)
+        }
+
+        override fun onSetMediaItems(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: List<MediaItem>,
+            startIndex: Int,
+            startPositionMs: Long
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            mediaItems.firstOrNull()?.let { prepareFromCache(it) }
+            val result = MediaSession.MediaItemsWithStartPosition(mediaItems, startIndex, startPositionMs)
+            return Futures.immediateFuture(result)
         }
     }
 
+    private fun prepareFromCache(mediaItem: MediaItem) {
+        val audioData = AudioCache.get(mediaItem.mediaId)
+        if (audioData != null) {
+            val dataSourceFactory = DataSource.Factory { ByteArrayDataSource(audioData) }
+            val mediaSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                .createMediaSource(mediaItem)
+            player.setMediaSource(mediaSource)
+        } else {
+            // If data is not in cache, we can't play it.
+            // The ViewModel is responsible for putting it there first.
+            // We'll just prepare the player with an empty source to avoid errors.
+            player.clearMediaItems()
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()

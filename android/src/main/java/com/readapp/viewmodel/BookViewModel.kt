@@ -15,8 +15,14 @@ import android.content.ComponentName
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.MoreExecutors
+import com.readapp.data.ReadApiService
+import com.readapp.data.ReadRepository
+import com.readapp.data.UserPreferences
 import com.readapp.media.AudioCache
 import com.readapp.media.ReadAudioService
+import com.readapp.data.model.Book
+import com.readapp.data.model.Chapter
+import com.readapp.data.model.HttpTTS
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -670,7 +676,9 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
             _errorMessage.value = null
             val result = repository.importBook(currentServerEndpoint(), _publicServerAddress.value.ifBlank { null }, _accessToken.value, uri, appContext)
             result.onFailure { error -> _errorMessage.value = error.message }
-            result.onSuccess { refreshBooksInternal(showLoading = false) }
+            if (result.isSuccess) {
+                refreshBooksInternal(showLoading = false)
+            }
             _isLoading.value = false
         }
     }
@@ -899,10 +907,23 @@ class BookViewModel(application: Application) : AndroidViewModel(application) {
     }
     private fun applyBooksFilterAndSort() {
         val filtered = if (currentSearchQuery.isBlank()) allBooks else allBooks.filter { it.name.orEmpty().lowercase().contains(currentSearchQuery.lowercase()) || it.author.orEmpty().lowercase().contains(currentSearchQuery.lowercase()) }
-        val sorted = if (_bookshelfSortByRecent.value) filtered.mapIndexed { index, book -> index to book }.sortedWith { a, b ->
-            val time1 = a.second.durChapterTime ?: 0L; val time2 = b.second.durChapterTime ?: 0L
-            when { time1 == 0L && time2 == 0L -> a.first.compareTo(b.first); time1 == 0L -> 1; time2 == 0L -> -1; time1 == time2 -> a.first.compareTo(b.first); else -> if (time1 > time2) -1 else 1 }
-        }.map { it.second } else filtered
+        val sorted = if (_bookshelfSortByRecent.value) {
+            val indexed = filtered.mapIndexed { index, book -> index to book }
+            val sortedPairs = indexed.sortedWith { a: Pair<Int, Book>, b: Pair<Int, Book> ->
+                val time1 = a.second.durChapterTime ?: 0L
+                val time2 = b.second.durChapterTime ?: 0L
+                when {
+                    time1 == 0L && time2 == 0L -> a.first.compareTo(b.first)
+                    time1 == 0L -> 1
+                    time2 == 0L -> -1
+                    time1 == time2 -> a.first.compareTo(b.first)
+                    else -> if (time1 > time2) -1 else 1
+                }
+            }
+            sortedPairs.map { it.second }
+        } else {
+            filtered
+        }
         _books.value = sorted
     }
     private fun isPunctuationOnly(sentence: String): Boolean {
