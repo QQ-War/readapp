@@ -23,15 +23,19 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
-            storeFile = file("${System.getProperty("user.home")}/.android/debug.keystore")
-            storePassword = "android"
+        create("debug") {
+            keyAlias = "readappdebug"
+            keyPassword = "readapp"
+            storeFile = file("$rootDir/keystore/readapp-debug.p12")
+            storePassword = "readapp"
+            storeType = "PKCS12"
         }
     }
 
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(

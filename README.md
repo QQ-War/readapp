@@ -21,3 +21,10 @@ ReadApp 是轻阅读后端（https://github.com/autobcb/read）的 iOS/Android �
 更多细节见：
 - `快速开始.md`
 - `android/README.md`
+
+## Android ????
+- ?????`android/keystore/readapp-debug.p12`
+- ???`readappdebug`
+- ??/???`readapp`
+- ????? Debug ? GitHub Actions ? Debug APK ??????
+

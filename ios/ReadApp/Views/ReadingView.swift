@@ -65,6 +65,10 @@ struct ReadingView: View {
                     }
                     .overlay {
                         GeometryReader { geometry in
+                            let swipeGesture = DragGesture(minimumDistance: 20)
+                                .onEnded { value in
+                                    handleHorizontalSwipe(value)
+                                }
                             if #available(iOS 17.0, *) {
                                 let singleTap = SpatialTapGesture(count: 1)
                                     .onEnded { value in
@@ -87,6 +91,7 @@ struct ReadingView: View {
                                 Color.clear
                                     .contentShape(Rectangle())
                                     .gesture(singleTap)
+                                    .simultaneousGesture(swipeGesture)
                             } else {
                                 // Fallback for iOS < 17: use three tappable regions to mimic left/middle/right taps
                                 HStack(spacing: 0) {
@@ -130,6 +135,7 @@ struct ReadingView: View {
                                         .frame(width: geometry.size.width / 3)
                                 }
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .simultaneousGesture(swipeGesture)
                             }
                         }
                     }
@@ -138,13 +144,13 @@ struct ReadingView: View {
                     ScrollViewReader { proxy in
                         ScrollView {
                             VStack(alignment: .leading, spacing: 16) {
-                                if showUIControls {
-                                    if currentChapterIndex < chapters.count {
-                                        Text(chapters[currentChapterIndex].title)
-                                            .font(.title2)
-                                            .fontWeight(.bold)
-                                            .padding(.bottom, 8)
-                                    }
+                                if currentChapterIndex < chapters.count {
+                                    Text(chapters[currentChapterIndex].title)
+                                        .font(.title2)
+                                        .fontWeight(.bold)
+                                        .padding(.bottom, 8)
+                                        .opacity(showUIControls ? 1 : 0)
+                                        .accessibilityHidden(!showUIControls)
                                 }
                                 
                                 if !contentSentences.isEmpty && ttsManager.isPlaying {
@@ -204,7 +210,7 @@ struct ReadingView: View {
                     }
                 }
                 
-                if showUIControls {
+                Group {
                     if ttsManager.isPlaying && !contentSentences.isEmpty {
                         TTSControlBar(
                             ttsManager: ttsManager,
@@ -226,6 +232,9 @@ struct ReadingView: View {
                         )
                     }
                 }
+                .opacity(showUIControls ? 1 : 0)
+                .allowsHitTesting(showUIControls)
+                .accessibilityHidden(!showUIControls)
             }
             
             if isLoading {
@@ -238,8 +247,6 @@ struct ReadingView: View {
         }
         .navigationTitle(book.name ?? "阅读")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarHidden(!showUIControls)
-        .statusBar(hidden: !showUIControls)
         .sheet(isPresented: $showChapterList) {
             ChapterListView(
                 chapters: chapters,
@@ -481,6 +488,18 @@ struct ReadingView: View {
             nextChapter()
         }
     }
+
+    private func handleHorizontalSwipe(_ value: DragGesture.Value) {
+        let horizontal = value.translation.width
+        let vertical = value.translation.height
+        guard abs(horizontal) > abs(vertical), abs(horizontal) > 40 else { return }
+        if horizontal < 0 {
+            goToNextPage()
+        } else {
+            goToPreviousPage()
+        }
+    }
+
 }
 
 // MARK: - Text Paginator
