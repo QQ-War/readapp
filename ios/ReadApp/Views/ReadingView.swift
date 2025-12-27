@@ -45,9 +45,7 @@ struct ReadingView: View {
         // .navigationBarHidden(!showUIControls) // ??
         // .statusBar(hidden: !showUIControls) // ??
         .toolbar(content: toolbarContent)
-        .toolbarBackground(.visible, for: .navigationBar) // ?????????
-        .toolbar(showUIControls ? .visible : .hidden, for: .navigationBar)
-        .toolbar(showUIControls ? .visible : .hidden, for: .bottomBar)
+        .applyToolbarVisibility(showUIControls: showUIControls)
         .sheet(isPresented: $showChapterList) {
             ChapterListView(
                 chapters: chapters,
@@ -89,8 +87,8 @@ struct ReadingView: View {
 
     @ToolbarContentBuilder
     private func toolbarContent() -> some ToolbarContent {
-        if showUIControls {
-            ToolbarItem(placement: .principal) {
+        ToolbarItem(placement: .principal) {
+            if showUIControls {
                 if currentChapterIndex < chapters.count {
                     Text(chapters[currentChapterIndex].title)
                         .font(.headline)
@@ -100,6 +98,8 @@ struct ReadingView: View {
                         .font(.headline)
                         .lineLimit(1)
                 }
+            } else {
+                EmptyView()
             }
         }
     }
@@ -560,6 +560,20 @@ struct ReadingView: View {
         .shadow(color: Color.black.opacity(0.1), radius: 4, y: 2)
     }
 
+}
+
+private extension View {
+    @ViewBuilder
+    func applyToolbarVisibility(showUIControls: Bool) -> some View {
+        if #available(iOS 16.0, *) {
+            self
+                .toolbarBackground(.visible, for: .navigationBar)
+                .toolbar(showUIControls ? .visible : .hidden, for: .navigationBar)
+                .toolbar(showUIControls ? .visible : .hidden, for: .bottomBar)
+        } else {
+            self
+        }
+    }
 }
 
 
