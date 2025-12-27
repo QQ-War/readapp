@@ -855,7 +855,7 @@ class TTSManager: NSObject, ObservableObject {
 
             await withTaskGroup(of: Void.self) { group in
                 var activeDownloads = 0
-                var queue = self.dequeuePreloadQueue()
+                let queue = self.dequeuePreloadQueue()
                 var queueIndex = 0
 
                 while queueIndex < queue.count || activeDownloads > 0 {
@@ -930,7 +930,7 @@ class TTSManager: NSObject, ObservableObject {
         
         // 跳过纯标点
         if isPunctuationOnly(sentence) {
-            await MainActor.run {
+            _ = await MainActor.run {
                 preloadedIndices.insert(index)
             }
             return true

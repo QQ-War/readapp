@@ -63,7 +63,7 @@ class ReplaceRuleViewModel: ObservableObject {
         do {
             try await apiService.toggleReplaceRule(id: id, isEnabled: isEnabled)
             // Optimistically update the local state
-            if let index = rules.firstIndex(where: { $0.id == id }) {
+            if rules.contains(where: { $0.id == id }) {
                 // This is tricky without the full object back. Re-fetching is safer.
                 await fetchRules()
             }

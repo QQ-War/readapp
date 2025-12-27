@@ -44,21 +44,7 @@ struct ReadingView: View {
         // .navigationBarTitleDisplayMode(.inline) // ???????
         // .navigationBarHidden(!showUIControls) // ??
         // .statusBar(hidden: !showUIControls) // ??
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                if showUIControls {
-                    if currentChapterIndex < chapters.count {
-                        Text(chapters[currentChapterIndex].title)
-                            .font(.headline)
-                            .lineLimit(1)
-                    } else {
-                        Text(book.name ?? "??")
-                            .font(.headline)
-                            .lineLimit(1)
-                    }
-                }
-            }
-        }
+        .toolbar(content: toolbarContent)
         .toolbarBackground(.visible, for: .navigationBar) // ?????????
         .toolbar(showUIControls ? .visible : .hidden, for: .navigationBar)
         .toolbar(showUIControls ? .visible : .hidden, for: .bottomBar)
@@ -96,6 +82,23 @@ struct ReadingView: View {
                 showUIControls = true
                 if ttsManager.currentSentenceIndex > 0 && ttsManager.currentSentenceIndex <= contentSentences.count {
                     lastTTSSentenceIndex = ttsManager.currentSentenceIndex
+                }
+            }
+        }
+    }
+
+    @ToolbarContentBuilder
+    private func toolbarContent() -> some ToolbarContent {
+        if showUIControls {
+            ToolbarItem(placement: .principal) {
+                if currentChapterIndex < chapters.count {
+                    Text(chapters[currentChapterIndex].title)
+                        .font(.headline)
+                        .lineLimit(1)
+                } else {
+                    Text(book.name ?? "??")
+                        .font(.headline)
+                        .lineLimit(1)
                 }
             }
         }
