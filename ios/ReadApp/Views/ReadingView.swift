@@ -603,13 +603,14 @@ struct TextPaginator {
             chapterTitle: chapterTitle
         )
         let framesetter = CTFramesetterCreateWithAttributedString(attributedText)
-        let bounds = CGRect(origin: .zero, size: size)
+        // Safety margin: reduce height slightly to avoid Core Text rounding jitter where fitting during pagination fails during drawing
+        let safeBounds = CGRect(origin: .zero, size: CGSize(width: size.width, height: max(1, size.height - 1)))
         let prefixLength = prefixLength(for: chapterTitle)
 
         var pages: [PaginatedPage] = []
         var location = 0
         while location < attributedText.length {
-            let path = CGPath(rect: bounds, transform: nil)
+            let path = CGPath(rect: safeBounds, transform: nil)
             let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: location, length: 0), path, nil)
             let visibleRange = CTFrameGetVisibleStringRange(frame)
 

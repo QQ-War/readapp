@@ -74,6 +74,59 @@ class SourceViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun deleteSource(source: BookSource) {
+        val currentSources = _sources.value
+        _sources.value = currentSources.filter { it.bookSourceUrl != source.bookSourceUrl }
+
+        viewModelScope.launch {
+            val serverUrl = userPreferences.serverUrl.first()
+            val publicUrl = userPreferences.publicServerUrl.first().ifBlank { null }
+            val token = userPreferences.accessToken.first()
+
+            val result = repository.deleteBookSource(serverUrl, publicUrl, token, source.bookSourceUrl)
+            if (result.isFailure) {
+                _sources.value = currentSources // Revert
+                _errorMessage.value = result.exceptionOrNull()?.message ?: "删除失败"
+            }
+        }
+    }
+
+    fun toggleSource(source: BookSource) {
+        val currentSources = _sources.value
+        val newSources = currentSources.map {
+            if (it.bookSourceUrl == source.bookSourceUrl) it.copy(enabled = !it.enabled) else it
+        }
+        _sources.value = newSources
+
+        viewModelScope.launch {
+            val serverUrl = userPreferences.serverUrl.first()
+            val publicUrl = userPreferences.publicServerUrl.first().ifBlank { null }
+            val token = userPreferences.accessToken.first()
+
+            val result = repository.toggleBookSource(serverUrl, publicUrl, token, source.bookSourceUrl, !source.enabled)
+            if (result.isFailure) {
+                _sources.value = currentSources // Revert
+                _errorMessage.value = result.exceptionOrNull()?.message ?: "操作失败"
+            }
+        }
+    }
+
+    suspend fun getSourceDetail(id: String): String? {
+        val serverUrl = userPreferences.serverUrl.first()
+        val publicUrl = userPreferences.publicServerUrl.first().ifBlank { null }
+        val token = userPreferences.accessToken.first()
+
+        return repository.getBookSourceDetail(serverUrl, publicUrl, token, id).getOrNull()
+    }
+
+    suspend fun saveSource(jsonContent: String): Result<Any> {
+        val serverUrl = userPreferences.serverUrl.first()
+        val publicUrl = userPreferences.publicServerUrl.first().ifBlank { null }
+        val token = userPreferences.accessToken.first()
+
+        return repository.saveBookSource(serverUrl, publicUrl, token, jsonContent)
+    }
+
     companion object {
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {

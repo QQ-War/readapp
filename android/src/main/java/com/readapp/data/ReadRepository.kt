@@ -150,6 +150,48 @@ class ReadRepository(private val apiFactory: (String) -> ReadApiService) {
         }
         return Result.success(allSources)
     }
+
+    suspend fun saveBookSource(
+        baseUrl: String,
+        publicUrl: String?,
+        accessToken: String,
+        jsonContent: String
+    ): Result<Any> {
+        val requestBody = jsonContent.toRequestBody("text/plain".toMediaTypeOrNull())
+        return executeWithFailover {
+            it.saveBookSource(accessToken, requestBody)
+        }(buildEndpoints(baseUrl, publicUrl))
+    }
+
+    suspend fun deleteBookSource(
+        baseUrl: String,
+        publicUrl: String?,
+        accessToken: String,
+        id: String
+    ): Result<Any> = executeWithFailover {
+        it.deleteBookSource(accessToken, id)
+    }(buildEndpoints(baseUrl, publicUrl))
+
+    suspend fun toggleBookSource(
+        baseUrl: String,
+        publicUrl: String?,
+        accessToken: String,
+        id: String,
+        isEnabled: Boolean
+    ): Result<Any> = executeWithFailover {
+        it.toggleBookSource(accessToken, id, if (isEnabled) "1" else "0")
+    }(buildEndpoints(baseUrl, publicUrl))
+
+    suspend fun getBookSourceDetail(
+        baseUrl: String,
+        publicUrl: String?,
+        accessToken: String,
+        id: String
+    ): Result<String> = executeWithFailover {
+        it.getBookSourceDetail(accessToken, id)
+    }(buildEndpoints(baseUrl, publicUrl)).map { map ->
+        map["json"] as? String ?: ""
+    }
     // endregion
 
     private fun createMultipartBodyPart(fileUri: Uri, context: Context): MultipartBody.Part? {

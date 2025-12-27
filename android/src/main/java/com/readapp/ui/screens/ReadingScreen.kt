@@ -70,6 +70,7 @@ fun ReadingScreen(
     currentPlayingParagraph: Int = -1,  // 当前播放的段落索引
     preloadedParagraphs: Set<Int> = emptySet(),  // 已预载的段落索引
     preloadedChapters: Set<Int> = emptySet(),
+    showTtsControls: Boolean = false,
     onPlayPauseClick: () -> Unit = {},
     onStartListening: (Int) -> Unit = {},
     onStopListening: () -> Unit = {},
@@ -84,6 +85,7 @@ fun ReadingScreen(
     var showChapterList by remember { mutableStateOf(false) }
     var showFontDialog by remember { mutableStateOf(false) }
     var currentPageStartIndex by remember { mutableStateOf(0) }
+    var pendingJumpToLastPage by remember { mutableStateOf(false) }
     val scrollState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     val latestOnExit by rememberUpdatedState(onExit)
@@ -268,6 +270,17 @@ fun ReadingScreen(
                     )
                     val pagerState = rememberPagerState { paginatedPages.size.coerceAtLeast(1) }
                     val viewConfiguration = LocalViewConfiguration.current
+                    val onPreviousChapterFromPager = {
+                        if (currentChapterIndex > 0) {
+                            pendingJumpToLastPage = true
+                            onChapterClick(currentChapterIndex - 1)
+                        }
+                    }
+                    val onNextChapterFromPager = {
+                        if (currentChapterIndex < chapters.size - 1) {
+                            onChapterClick(currentChapterIndex + 1)
+                        }
+                    }
 
                     Box(modifier = Modifier.fillMaxSize()) {
                         HorizontalPager(
@@ -287,9 +300,8 @@ fun ReadingScreen(
                                             showControls = showControls,
                                             pagerState = pagerState,
                                             paginatedPages = paginatedPages,
-                                            currentChapterIndex = currentChapterIndex,
-                                            chapters = chapters,
-                                            onChapterClick = onChapterClick,
+                                            onPreviousChapter = onPreviousChapterFromPager,
+                                            onNextChapter = onNextChapterFromPager,
                                             coroutineScope = coroutineScope,
                                             onToggleControls = { showControls = it }
                                         )
@@ -314,6 +326,13 @@ fun ReadingScreen(
                                 .getOrNull(pagerState.currentPage)
                                 ?.startParagraphIndex
                                 ?: 0
+                        }
+                        
+                        LaunchedEffect(pendingJumpToLastPage, paginatedPages, currentChapterIndex) {
+                            if (pendingJumpToLastPage && paginatedPages.isNotEmpty()) {
+                                pagerState.scrollToPage(paginatedPages.lastIndex)
+                                pendingJumpToLastPage = false
+                            }
                         }
 
                     }
@@ -350,6 +369,9 @@ fun ReadingScreen(
                 isPlaying = isPlaying,
                 onPreviousChapter = {
                     if (currentChapterIndex > 0) {
+                        if (readingMode == ReadingMode.Horizontal) {
+                            pendingJumpToLastPage = true
+                        }
                         onChapterClick(currentChapterIndex - 1)
                     }
                 },
@@ -602,9 +624,8 @@ private fun handleHorizontalTap(
     showControls: Boolean,
     pagerState: androidx.compose.foundation.pager.PagerState,
     paginatedPages: List<PaginatedPage>,
-    currentChapterIndex: Int,
-    chapters: List<Chapter>,
-    onChapterClick: (Int) -> Unit,
+    onPreviousChapter: () -> Unit,
+    onNextChapter: () -> Unit,
     coroutineScope: kotlinx.coroutines.CoroutineScope,
     onToggleControls: (Boolean) -> Unit
 ) {
@@ -619,8 +640,8 @@ private fun handleHorizontalTap(
             coroutineScope.launch {
                 if (pagerState.currentPage > 0) {
                     pagerState.animateScrollToPage(pagerState.currentPage - 1)
-                } else if (currentChapterIndex > 0) {
-                    onChapterClick(currentChapterIndex - 1)
+                } else {
+                    onPreviousChapter()
                 }
             }
         }
@@ -631,8 +652,8 @@ private fun handleHorizontalTap(
             coroutineScope.launch {
                 if (pagerState.currentPage < paginatedPages.lastIndex) {
                     pagerState.animateScrollToPage(pagerState.currentPage + 1)
-                } else if (currentChapterIndex < chapters.size - 1) {
-                    onChapterClick(currentChapterIndex + 1)
+                } else {
+                    onNextChapter()
                 }
             }
         }

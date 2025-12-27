@@ -23,12 +23,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.readapp.ui.screens.BookshelfScreen
 import com.readapp.ui.screens.MainScreen
 import com.readapp.ui.screens.LoginScreen
 import com.readapp.ui.screens.ReadingScreen
 import com.readapp.ui.screens.ReplaceRuleScreen
 import com.readapp.ui.screens.SettingsScreen
+import com.readapp.ui.screens.SourceEditScreen
 import com.readapp.ui.theme.ReadAppTheme
 import com.readapp.viewmodel.BookViewModel
 import android.net.Uri
@@ -255,6 +257,18 @@ fun ReadAppMain() {
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
+            
+            // 书源编辑页面
+            composable(
+                route = Screen.SourceEdit.route,
+                arguments = listOf(navArgument("id") { nullable = true; defaultValue = null })
+            ) { backStackEntry ->
+                val id = backStackEntry.arguments?.getString("id")
+                SourceEditScreen(
+                    sourceId = id,
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
         }
 
         if (isLoading && accessToken.isNotBlank()) {
@@ -276,4 +290,7 @@ sealed class Screen(val route: String) {
     object Settings : Screen("settings")
     object ReplaceRules : Screen("replace_rules")
     object BookSource : Screen("book_source")
+    object SourceEdit : Screen("source_edit?id={id}") {
+        fun createRoute(id: String?) = if (id != null) "source_edit?id=$id" else "source_edit"
+    }
 }

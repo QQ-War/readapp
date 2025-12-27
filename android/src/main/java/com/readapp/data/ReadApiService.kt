@@ -15,6 +15,7 @@ import okhttp3.Interceptor
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -130,6 +131,31 @@ interface ReadApiService {
         @Query("md5") md5: String,
         @Query("page") page: Int
     ): Response<ApiResponse<List<BookSource>>>
+
+    @POST("saveBookSource")
+    suspend fun saveBookSource(
+        @Query("accessToken") accessToken: String,
+        @Body content: RequestBody
+    ): Response<ApiResponse<Any>>
+
+    @GET("delbookSource")
+    suspend fun deleteBookSource(
+        @Query("accessToken") accessToken: String,
+        @Query("id") id: String
+    ): Response<ApiResponse<Any>>
+
+    @GET("stopbookSource")
+    suspend fun toggleBookSource(
+        @Query("accessToken") accessToken: String,
+        @Query("id") id: String,
+        @Query("st") status: String
+    ): Response<ApiResponse<Any>>
+
+    @GET("getbookSources")
+    suspend fun getBookSourceDetail(
+        @Query("accessToken") accessToken: String,
+        @Query("id") id: String
+    ): Response<ApiResponse<Map<String, Any>>>
     // endregion
 
     companion object {

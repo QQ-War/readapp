@@ -65,7 +65,11 @@ fun MainScreen(
                     )
                 }
                 composable(BottomNavItem.BookSource.route) {
-                    SourceListScreen()
+                    SourceListScreen(
+                        onNavigateToEdit = { id ->
+                            mainNavController.navigate(Screen.SourceEdit.createRoute(id))
+                        }
+                    )
                 }
             }
         }
