@@ -112,7 +112,7 @@ fun ReadAppMain() {
 
                 // TTS 状态
                 val isPlaying by bookViewModel.isPlaying.collectAsState()
-                val isPlayingUi by bookViewModel.isPlayingUi.collectAsState()
+                val hasActiveTtsSession by bookViewModel.hasActiveTtsSession.collectAsState()
                 val currentPlayingParagraph by bookViewModel.currentParagraphIndex.collectAsState()
                 val preloadedParagraphs by bookViewModel.preloadedParagraphs.collectAsState()
 
@@ -141,7 +141,8 @@ fun ReadAppMain() {
                             navController.popBackStack()
                         },
                         // TTS 相关
-                        isPlaying = isPlayingUi,
+                        isPlaying = isPlaying,
+                        showTtsControls = hasActiveTtsSession,
                         currentPlayingParagraph = currentPlayingParagraph,
                         preloadedParagraphs = preloadedParagraphs,
                         onPlayPauseClick = {

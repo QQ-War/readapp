@@ -17,38 +17,61 @@ struct SourceListView: View {
                     }
                 }
             } else {
-                List(viewModel.sources) { source in
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(source.bookSourceName)
-                            .font(.headline)
-                            .foregroundColor(source.enabled ? .primary : .secondary)
-                        
-                        if let group = source.bookSourceGroup, !group.isEmpty {
-                            Text("分组: \(group)")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        Text(source.bookSourceUrl)
-                            .font(.caption)
-                            .foregroundColor(.gray)
-                        
-                        if let comment = source.bookSourceComment, !comment.isEmpty {
-                            Text(comment)
-                                .font(.footnote)
-                                .foregroundColor(.gray)
-                                .lineLimit(2)
+                List {
+                    ForEach(viewModel.sources) { source in
+                        NavigationLink(destination: SourceEditView(sourceId: source.bookSourceUrl)) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text(source.bookSourceName)
+                                        .font(.headline)
+                                        .foregroundColor(source.enabled ? .primary : .secondary)
+                                    
+                                    if let group = source.bookSourceGroup, !group.isEmpty {
+                                        Text("分组: \(group)")
+                                            .font(.subheadline)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    
+                                    Text(source.bookSourceUrl)
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
+                                
+                                Spacer()
+                                
+                                Toggle("", isOn: Binding(
+                                    get: { source.enabled },
+                                    set: { _ in viewModel.toggleSource(source: source) }
+                                ))
+                                .labelsHidden()
+                            }
+                            .padding(.vertical, 4)
                         }
                     }
-                    .padding(.vertical, 4)
+                    .onDelete(perform: deleteSource)
+                }
+                .refreshable {
+                    viewModel.fetchSources()
                 }
             }
         }
         .navigationTitle("书源管理")
-        .onAppear {
-            if viewModel.sources.isEmpty {
-                viewModel.fetchSources()
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                NavigationLink(destination: SourceEditView()) {
+                    Image(systemName: "plus")
+                }
             }
+        }
+        .onAppear {
+            viewModel.fetchSources()
+        }
+    }
+    
+    private func deleteSource(at offsets: IndexSet) {
+        offsets.forEach { index in
+            let source = viewModel.sources[index]
+            viewModel.deleteSource(source: source)
         }
     }
 }

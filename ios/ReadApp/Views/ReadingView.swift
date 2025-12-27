@@ -200,10 +200,14 @@ struct ReadingView: View {
         GeometryReader { geometry in
             let contentInsets = EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16)
             let width = geometry.size.width
+            let chapterTitle = chapters.indices.contains(currentChapterIndex)
+                ? chapters[currentChapterIndex].title
+                : nil
             let attributedText = TextPaginator.attributedText(
                 contentSentences,
                 fontSize: preferences.fontSize,
-                lineSpacing: preferences.lineSpacing
+                lineSpacing: preferences.lineSpacing,
+                chapterTitle: chapterTitle
             )
             let tapHandler: (CGFloat) -> Void = { tapX in
                 if showUIControls {
@@ -229,11 +233,11 @@ struct ReadingView: View {
                 ForEach(Array(paginatedPages.enumerated()), id: \.offset) { index, page in
                     CTPageView(attributedText: attributedText, range: page.range)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        .padding(contentInsets)
                         .tag(index)
                 }
             }
             .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+            .padding(contentInsets)
             .simultaneousGesture(backSwipeGesture)
             .onAppear {
                 repaginateContent(in: geometry.size, contentInsets: contentInsets)
@@ -493,11 +497,15 @@ struct ReadingView: View {
             width: max(0, size.width - (contentInsets.leading + contentInsets.trailing)),
             height: max(0, size.height - (contentInsets.top + contentInsets.bottom))
         )
+        let chapterTitle = chapters.indices.contains(currentChapterIndex)
+            ? chapters[currentChapterIndex].title
+            : nil
         paginatedPages = TextPaginator.paginate(
             contentSentences,
             in: contentSize,
             fontSize: preferences.fontSize,
-            lineSpacing: preferences.lineSpacing
+            lineSpacing: preferences.lineSpacing,
+            chapterTitle: chapterTitle
         )
         if pendingJumpToLastPage {
             currentPageIndex = max(paginatedPages.count - 1, 0)
@@ -583,13 +591,20 @@ struct TextPaginator {
         _ sentences: [String],
         in size: CGSize,
         fontSize: CGFloat,
-        lineSpacing: CGFloat
+        lineSpacing: CGFloat,
+        chapterTitle: String?
     ) -> [PaginatedPage] {
         guard !sentences.isEmpty, size.width > 0, size.height > 0 else { return [] }
         let paragraphStarts = paragraphStartIndices(sentences: sentences)
-        let attributedText = attributedText(sentences, fontSize: fontSize, lineSpacing: lineSpacing)
+        let attributedText = attributedText(
+            sentences,
+            fontSize: fontSize,
+            lineSpacing: lineSpacing,
+            chapterTitle: chapterTitle
+        )
         let framesetter = CTFramesetterCreateWithAttributedString(attributedText)
         let bounds = CGRect(origin: .zero, size: size)
+        let prefixLength = prefixLength(for: chapterTitle)
 
         var pages: [PaginatedPage] = []
         var location = 0
@@ -603,7 +618,8 @@ struct TextPaginator {
             }
 
             let pageRange = NSRange(location: location, length: visibleRange.length)
-            let startSentenceIndex = sentenceIndex(for: location, in: paragraphStarts)
+            let adjustedLocation = max(0, location - prefixLength)
+            let startSentenceIndex = sentenceIndex(for: adjustedLocation, in: paragraphStarts)
             pages.append(PaginatedPage(range: pageRange, startSentenceIndex: startSentenceIndex))
 
             location += visibleRange.length
@@ -616,7 +632,8 @@ struct TextPaginator {
     static func attributedText(
         _ sentences: [String],
         fontSize: CGFloat,
-        lineSpacing: CGFloat
+        lineSpacing: CGFloat,
+        chapterTitle: String?
     ) -> NSAttributedString {
         let font = UIFont.systemFont(ofSize: fontSize)
         let paragraphStyle = NSMutableParagraphStyle()
@@ -626,13 +643,31 @@ struct TextPaginator {
             .paragraphStyle: paragraphStyle
         ]
         let fullText = fullContent(sentences: sentences)
-        return NSAttributedString(string: fullText, attributes: attributes)
+        let result = NSMutableAttributedString()
+        if let title = chapterTitle, !title.isEmpty {
+            let titleFont = UIFont.boldSystemFont(ofSize: fontSize + 4)
+            let titleStyle = NSMutableParagraphStyle()
+            titleStyle.lineSpacing = lineSpacing
+            let titleAttributes: [NSAttributedString.Key: Any] = [
+                .font: titleFont,
+                .paragraphStyle: titleStyle
+            ]
+            result.append(NSAttributedString(string: title, attributes: titleAttributes))
+            result.append(NSAttributedString(string: "\n\n", attributes: attributes))
+        }
+        result.append(NSAttributedString(string: fullText, attributes: attributes))
+        return result
     }
 
     private static func fullContent(sentences: [String]) -> String {
         sentences
             .map { "    " + $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .joined(separator: "\n\n")
+    }
+
+    private static func prefixLength(for chapterTitle: String?) -> Int {
+        guard let title = chapterTitle, !title.isEmpty else { return 0 }
+        return (title + "\n\n").utf16.count
     }
 
     private static func paragraphStartIndices(sentences: [String]) -> [Int] {

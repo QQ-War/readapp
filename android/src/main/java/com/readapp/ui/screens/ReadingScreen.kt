@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.TextUnit
 import coil.compose.AsyncImage
 import com.readapp.data.model.Book
 import com.readapp.data.model.Chapter
@@ -245,6 +246,14 @@ fun ReadingScreen(
                         fontSize = readingFontSize.sp,
                         lineHeight = (readingFontSize * 1.8f).sp
                     )
+                    val lineHeightPx = with(LocalDensity.current) {
+                        val lineHeight = style.lineHeight
+                        if (lineHeight.value.isNaN() || lineHeight.value <= 0f) {
+                            (readingFontSize * 1.8f).sp.toPx()
+                        } else {
+                            lineHeight.toPx()
+                        }
+                    }
                     val pagePadding = contentPadding
                     val density = LocalDensity.current
                     val availableConstraints = remember(constraints, pagePadding, density) {
@@ -254,7 +263,8 @@ fun ReadingScreen(
                     val paginatedPages = rememberPaginatedText(
                         paragraphs = paragraphs,
                         style = style,
-                        constraints = availableConstraints
+                        constraints = availableConstraints,
+                        lineHeightPx = lineHeightPx
                     )
                     val pagerState = rememberPagerState { paginatedPages.size.coerceAtLeast(1) }
                     val viewConfiguration = LocalViewConfiguration.current
@@ -375,7 +385,7 @@ fun ReadingScreen(
                 onFontSettings = { showFontDialog = true },
                 canGoPrevious = currentChapterIndex > 0,
                 canGoNext = currentChapterIndex < chapters.size - 1,
-                showTtsControls = isPlaying  // 仅在实际播放/保持播放时显示 TTS 控制
+                showTtsControls = showTtsControls  // 仅在实际播放/保持播放时显示 TTS 控制
             )
         }
 
@@ -456,7 +466,8 @@ private fun ParagraphItem(
 private fun rememberPaginatedText(
     paragraphs: List<String>,
     style: TextStyle,
-    constraints: Constraints
+    constraints: Constraints,
+    lineHeightPx: Float
 ): List<PaginatedPage> {
     val textMeasurer = rememberTextMeasurer()
 
@@ -471,13 +482,17 @@ private fun rememberPaginatedText(
         var currentOffset = 0
 
         while (currentOffset < fullText.length) {
+            val safeLineHeight = if (lineHeightPx > 0f) lineHeightPx else 1f
+            val maxLines = (constraints.maxHeight / safeLineHeight).toInt().coerceAtLeast(1)
+
             val result = textMeasurer.measure(
                 text = AnnotatedString(fullText.substring(currentOffset)),
                 style = style,
                 constraints = Constraints(
                     maxWidth = constraints.maxWidth,
                     maxHeight = constraints.maxHeight
-                )
+                ),
+                maxLines = maxLines
             )
 
             val endOffset = currentOffset + lastVisibleOffset(result)
