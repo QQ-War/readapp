@@ -519,7 +519,7 @@ class APIService: ObservableObject {
         }
         
         // Response data structure: {"json": "...", "enabled": true, ...}
-        struct BookSourceDetailResponse: Decodable {
+        struct BookSourceDetailResponse: Codable {
             let json: String?
         }
         
