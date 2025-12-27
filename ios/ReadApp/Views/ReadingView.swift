@@ -82,7 +82,7 @@ struct ReadingView: View {
     }
 
     @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
+    private func toolbarContent() -> some ToolbarContent {
         ToolbarItem(placement: .navigationBarLeading) {
             Button(action: { dismiss() }) {
                 Image(systemName: "chevron.left")
