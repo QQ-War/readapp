@@ -86,6 +86,14 @@ fun ReadingScreen(
     val scrollState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     val latestOnExit by rememberUpdatedState(onExit)
+    val contentPadding = remember {
+        PaddingValues(
+            start = AppDimens.PaddingLarge,
+            end = AppDimens.PaddingLarge,
+            top = 80.dp,
+            bottom = 120.dp
+        )
+    }
     
     if (errorMessage != null) {
         AlertDialog(
@@ -169,12 +177,7 @@ fun ReadingScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .weight(1f),
-                    contentPadding = PaddingValues(
-                        start = AppDimens.PaddingLarge,
-                        end = AppDimens.PaddingLarge,
-                        top = if (showControls) 80.dp else AppDimens.PaddingLarge,
-                        bottom = if (showControls) 120.dp else AppDimens.PaddingLarge
-                    )
+                    contentPadding = contentPadding
                 ) {
                     // 章节标题
                     item {
@@ -242,14 +245,7 @@ fun ReadingScreen(
                         fontSize = readingFontSize.sp,
                         lineHeight = (readingFontSize * 1.8f).sp
                     )
-                    val pagePadding = remember(showControls) {
-                        PaddingValues(
-                            start = AppDimens.PaddingLarge,
-                            end = AppDimens.PaddingLarge,
-                            top = if (showControls) 80.dp else AppDimens.PaddingLarge,
-                            bottom = if (showControls) 120.dp else AppDimens.PaddingLarge
-                        )
-                    }
+                    val pagePadding = contentPadding
                     val density = LocalDensity.current
                     val availableConstraints = remember(constraints, pagePadding, density) {
                         adjustedConstraints(constraints, pagePadding, density)

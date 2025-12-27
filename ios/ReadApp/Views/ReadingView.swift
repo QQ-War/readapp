@@ -28,7 +28,6 @@ struct ReadingView: View {
     init(book: Book) {
         self.book = book
         _currentChapterIndex = State(initialValue: book.durChapterIndex ?? 0)
-        // 从服务器加载的进度初始化
         _lastTTSSentenceIndex = State(initialValue: Int(book.durChapterPos ?? 0))
     }
     
@@ -36,16 +35,32 @@ struct ReadingView: View {
         ZStack {
             backgroundView
             mainContent
-            if showUIControls { topBarOverlay }
             if isLoading { loadingOverlay }
-            if preferences.readingMode == .horizontal { bottomControlOverlay }
         }
-        .navigationTitle(book.name ?? "阅读")
-        // .navigationBarTitleDisplayMode(.inline) // ???????
-        // .navigationBarHidden(!showUIControls) // ??
-        // .statusBar(hidden: !showUIControls) // ??
-        .toolbar(content: toolbarContent)
-        .applyToolbarVisibility(showUIControls: showUIControls)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: { dismiss() }) {
+                    Image(systemName: "chevron.left")
+                }
+                .opacity(showUIControls ? 1 : 0)
+            }
+            ToolbarItem(placement: .principal) {
+                Text(chapters.indices.contains(currentChapterIndex) ? chapters[currentChapterIndex].title : "")
+                    .font(.caption)
+                    .lineLimit(1)
+                    .opacity(showUIControls ? 1 : 0)
+            }
+             ToolbarItem(placement: .navigationBarTrailing) {
+                // Balance the leading item
+                Color.clear.frame(width: 30, height: 30)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: showUIControls)
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .toolbarBackground(.automatic, for: .navigationBar)
+        .toolbar(.visible, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
         .sheet(isPresented: $showChapterList) {
             ChapterListView(
                 chapters: chapters,
@@ -85,30 +100,8 @@ struct ReadingView: View {
         }
     }
 
-    @ToolbarContentBuilder
-    private func toolbarContent() -> some ToolbarContent {
-        ToolbarItem(placement: .principal) {
-            if showUIControls {
-                if currentChapterIndex < chapters.count {
-                    Text(chapters[currentChapterIndex].title)
-                        .font(.headline)
-                        .lineLimit(1)
-                } else {
-                    Text(book.name ?? "??")
-                        .font(.headline)
-                        .lineLimit(1)
-                }
-            } else {
-                EmptyView()
-            }
-        }
-    }
-    
-
-
     private var backgroundView: some View {
-        Color(UIColor.systemBackground)
-            .ignoresSafeArea()
+        Color(UIColor.systemBackground).ignoresSafeArea()
     }
 
     @ViewBuilder
@@ -119,17 +112,47 @@ struct ReadingView: View {
             } else {
                 verticalReader
             }
-
-            if preferences.readingMode != .horizontal {
+            
+            if showUIControls {
                 controlBar
-                    .opacity(showUIControls ? 1 : 0)
-                    .allowsHitTesting(showUIControls)
-                    .accessibilityHidden(!showUIControls)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
     }
-
+    
+    private var verticalReader: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                RichTextView(
+                    sentences: contentSentences,
+                    fontSize: preferences.fontSize,
+                    lineSpacing: preferences.lineSpacing,
+                    highlightIndex: lastTTSSentenceIndex,
+                    scrollProxy: scrollProxy
+                )
+                .padding()
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showUIControls.toggle()
+                }
+            }
+            .onChange(of: ttsManager.currentSentenceIndex) { newIndex in
+                if ttsManager.isPlaying && !contentSentences.isEmpty {
+                    withAnimation {
+                        proxy.scrollTo(newIndex, anchor: .center)
+                    }
+                }
+            }
+            .onAppear {
+                scrollProxy = proxy
+            }
+        }
+    }
+    
     private var horizontalReader: some View {
+        // Horizontal reader implementation remains the same
         GeometryReader { geometry in
             let contentInsets = EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16)
             let width = geometry.size.width
@@ -149,7 +172,7 @@ struct ReadingView: View {
                 }
             }
 
-            let tabView = TabView(selection: $currentPageIndex) {
+            let tabView = TabView(selection: $currentPageIndex) { 
                 ForEach(Array(paginatedPages.enumerated()), id: \.offset) { index, page in
                     Text(page.text)
                         .font(.system(size: preferences.fontSize))
@@ -196,107 +219,40 @@ struct ReadingView: View {
         }
     }
 
-    private var verticalReader: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    if currentChapterIndex < chapters.count {
-                        Text(chapters[currentChapterIndex].title)
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .padding(.bottom, 8)
-                            .opacity(showUIControls ? 1 : 0)
-                            .accessibilityHidden(!showUIControls)
-                    }
-
-                    if !contentSentences.isEmpty && ttsManager.isPlaying {
-                        // TTS????
-                        VStack(alignment: .leading, spacing: preferences.fontSize * 0.8) {
-                            ForEach(Array(contentSentences.enumerated()), id: \.offset) { index, sentence in
-                                Text("　　" + sentence.trimmingCharacters(in: .whitespacesAndNewlines))
-                                    .font(.system(size: preferences.fontSize))
-                                    .lineSpacing(preferences.lineSpacing)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .padding(.vertical, 6)
-                                    .padding(.horizontal, 8)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 4)
-                                            .fill(
-                                                index == ttsManager.currentSentenceIndex
-                                                    ? Color.blue.opacity(0.25)
-                                                    : (ttsManager.preloadedIndices.contains(index) && index > ttsManager.currentSentenceIndex)
-                                                        ? Color.green.opacity(0.15)
-                                                        : Color.clear
-                                            )
-                                            .animation(.easeInOut(duration: 0.3), value: ttsManager.currentSentenceIndex)
-                                    )
-                                    .id(index)
-                            }
-                        }
-                    } else {
-                        // ??????
-                        RichTextView(
-                            sentences: contentSentences,
-                            fontSize: preferences.fontSize,
-                            lineSpacing: preferences.lineSpacing,
-                            highlightIndex: lastTTSSentenceIndex,
-                            scrollProxy: scrollProxy
-                        )
-                    }
-                }
-                .padding()
-            }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    showUIControls.toggle()
-                }
-            }
-            .onChange(of: ttsManager.currentSentenceIndex) { newIndex in
-                if ttsManager.isPlaying && !contentSentences.isEmpty {
-                    withAnimation {
-                        proxy.scrollTo(newIndex, anchor: .center)
-                    }
-                }
-            }
-            .onAppear {
-                scrollProxy = proxy
-            }
-        }
-    }
-
-    private var topBarOverlay: some View {
-        GeometryReader { proxy in
-            VStack {
-                topBar
-                    .padding(.top, proxy.safeAreaInsets.top + 6)
-                Spacer()
-            }
-        }
-        .allowsHitTesting(showUIControls)
-        .accessibilityHidden(!showUIControls)
-    }
-
     private var loadingOverlay: some View {
-        ProgressView("???...")
+        ProgressView("加载中...")
             .padding()
-            .background(Color(UIColor.systemBackground))
+            .background(Color(UIColor.systemBackground).opacity(0.8))
             .cornerRadius(10)
             .shadow(radius: 10)
     }
 
-    private var bottomControlOverlay: some View {
-        VStack {
-            Spacer()
-            controlBar
+    // MARK: - Control Bar
+    @ViewBuilder
+    private var controlBar: some View {
+        if ttsManager.isPlaying && !contentSentences.isEmpty {
+            TTSControlBar(
+                ttsManager: ttsManager,
+                currentChapterIndex: currentChapterIndex,
+                chaptersCount: chapters.count,
+                onPreviousChapter: previousChapter,
+                onNextChapter: nextChapter,
+                onShowChapterList: { showChapterList = true }
+            )
+        } else {
+            NormalControlBar(
+                currentChapterIndex: currentChapterIndex,
+                chaptersCount: chapters.count,
+                onPreviousChapter: previousChapter,
+                onNextChapter: nextChapter,
+                onShowChapterList: { showChapterList = true },
+                onToggleTTS: toggleTTS,
+                onShowFontSettings: { showFontSettings = true }
+            )
         }
-        .opacity(showUIControls ? 1 : 0)
-        .allowsHitTesting(showUIControls)
-        .accessibilityHidden(!showUIControls)
     }
-    // MARK: - 内容处理
 
+    // MARK: - Content Processing
     private func updateProcessedContent(from rawText: String) {
         if rawText.isEmpty {
             currentContent = "章节内容为空"
@@ -343,7 +299,7 @@ struct ReadingView: View {
             .filter { !$0.isEmpty }
     }
     
-    // MARK: - 数据加载
+    // MARK: - Data Loading
     private func loadChapters() async {
         isLoading = true
         do {
@@ -396,7 +352,7 @@ struct ReadingView: View {
         }
     }
     
-    // MARK: - 章节导航
+    // MARK: - Navigation
     private func previousChapter() {
         guard currentChapterIndex > 0 else { return }
         currentChapterIndex -= 1
@@ -411,7 +367,7 @@ struct ReadingView: View {
         saveProgress()
     }
     
-    // MARK: - TTS 控制
+    // MARK: - TTS Control
     private func toggleTTS() {
         if ttsManager.isPlaying {
             if ttsManager.isPaused {
@@ -427,7 +383,6 @@ struct ReadingView: View {
     private func startTTS() {
         showUIControls = true
         
-        // 优先使用最后播放的索引，其次是服务器加载的索引
         let pageStartIndex = paginatedPages.indices.contains(currentPageIndex)
             ? paginatedPages[currentPageIndex].startSentenceIndex
             : nil
@@ -452,7 +407,7 @@ struct ReadingView: View {
         )
     }
     
-    // MARK: - 进度与预加载
+    // MARK: - Progress & Preloading
     private func preloadNextChapter() {
         guard currentChapterIndex < chapters.count - 1 else { return }
         let nextChapterIndex = currentChapterIndex + 1
@@ -511,67 +466,6 @@ struct ReadingView: View {
             withAnimation { currentPageIndex += 1 }
         } else if currentChapterIndex < chapters.count - 1 {
             nextChapter()
-        }
-    }
-
-    @ViewBuilder
-    private var controlBar: some View {
-        if ttsManager.isPlaying && !contentSentences.isEmpty {
-            TTSControlBar(
-                ttsManager: ttsManager,
-                currentChapterIndex: currentChapterIndex,
-                chaptersCount: chapters.count,
-                onPreviousChapter: previousChapter,
-                onNextChapter: nextChapter,
-                onShowChapterList: { showChapterList = true }
-            )
-        } else {
-            NormalControlBar(
-                currentChapterIndex: currentChapterIndex,
-                chaptersCount: chapters.count,
-                onPreviousChapter: previousChapter,
-                onNextChapter: nextChapter,
-                onShowChapterList: { showChapterList = true },
-                onToggleTTS: toggleTTS,
-                onShowFontSettings: { showFontSettings = true }
-            )
-        }
-    }
-
-    @ViewBuilder
-    private var topBar: some View {
-        HStack(spacing: 12) {
-            Button(action: { dismiss() }) {
-                Image(systemName: "chevron.left")
-                    .font(.title3)
-                    .frame(width: 36, height: 36)
-            }
-            Spacer()
-            Text(book.name ?? "阅读")
-                .font(.headline)
-                .lineLimit(1)
-            Spacer()
-            Color.clear
-                .frame(width: 36, height: 36)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color(UIColor.systemBackground).opacity(0.95))
-        .shadow(color: Color.black.opacity(0.1), radius: 4, y: 2)
-    }
-
-}
-
-private extension View {
-    @ViewBuilder
-    func applyToolbarVisibility(showUIControls: Bool) -> some View {
-        if #available(iOS 16.0, *) {
-            self
-                .toolbarBackground(.visible, for: .navigationBar)
-                .toolbar(showUIControls ? .visible : .hidden, for: .navigationBar)
-                .toolbar(showUIControls ? .visible : .hidden, for: .bottomBar)
-        } else {
-            self
         }
     }
 }
@@ -647,7 +541,7 @@ struct TextPaginator {
     }
 
     private static func sentenceIndex(for location: Int, in starts: [Int]) -> Int {
-        guard let index = starts.lastIndex(where: { $0 <= location }) else {
+        guard let index = starts.lastIndex(where: { $0 <= location }) else { 
             return 0
         }
         return index
@@ -919,8 +813,8 @@ struct FontSizeSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("完成") {
-                        dismiss()
+                    Button("完成") { 
+                        dismiss() 
                     }
                 }
             }

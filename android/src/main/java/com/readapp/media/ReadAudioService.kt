@@ -49,9 +49,14 @@ class ReadAudioService : MediaSessionService() {
     private fun prepareFromCache(mediaItem: MediaItem) {
         val audioData = AudioCache.get(mediaItem.mediaId)
         if (audioData != null) {
+            val safeItem = if (mediaItem.localConfiguration?.uri == null) {
+                mediaItem.buildUpon().setUri("https://localhost/").build()
+            } else {
+                mediaItem
+            }
             val dataSourceFactory = DataSource.Factory { ByteArrayDataSource(audioData) }
             val mediaSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                .createMediaSource(mediaItem)
+                .createMediaSource(safeItem)
             player.setMediaSource(mediaSource)
         } else {
             // If data is not in cache, we can't play it.
