@@ -36,23 +36,23 @@ struct ReadingView: View {
             backgroundView
             mainContent
             if showUIControls {
-                GeometryReader { _ in
+                GeometryReader { proxy in
                     VStack(spacing: 0) {
-                        topControlBar
+                        topControlBar(safeAreaTop: proxy.safeAreaInsets.top)
                         Spacer()
                     }
                 }
-                .ignoresSafeArea(edges: .top)
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
             if showUIControls {
-                GeometryReader { _ in
+                GeometryReader { proxy in
                     VStack(spacing: 0) {
                         Spacer()
                         controlBar
+                        Color(UIColor.systemBackground)
+                            .frame(height: proxy.safeAreaInsets.bottom)
                     }
                 }
-                .ignoresSafeArea(edges: .bottom)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             if isLoading { loadingOverlay }
@@ -248,7 +248,7 @@ struct ReadingView: View {
         }
     }
 
-    private var topControlBar: some View {
+    private func topControlBar(safeAreaTop: CGFloat) -> some View {
         HStack(spacing: 12) {
             Button(action: { dismiss() }) {
                 Image(systemName: "chevron.left")
@@ -264,8 +264,9 @@ struct ReadingView: View {
                 .frame(width: 36, height: 36)
         }
         .padding(.horizontal, 12)
+        .padding(.top, safeAreaTop)
         .padding(.bottom, 8)
-        .background(Color(UIColor.systemBackground).opacity(0.95))
+        .background(Color(UIColor.systemBackground).opacity(0.95).ignoresSafeArea(edges: .top))
         .shadow(color: Color.black.opacity(0.1), radius: 4, y: 2)
     }
     // MARK: - Content Processing
