@@ -3,6 +3,9 @@
 
 package com.readapp.ui.screens
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -26,13 +29,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import com.readapp.Screen
 import com.readapp.data.model.Book
 import com.readapp.ui.theme.AppDimens
 import com.readapp.ui.theme.customColors
+import com.readapp.viewmodel.BookViewModel
 @Composable
 fun BookshelfScreen(
     mainNavController: NavController,
@@ -322,15 +330,14 @@ private fun ReadingProgress(
                 color = MaterialTheme.customColors.textSecondary
             )
             Text(
-                text = "$currentChapter/${totalChapters}章",
+                text = "$currentChapter/$totalChapters章",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.customColors.textSecondary
             )
         }
-        
+
         Spacer(modifier = Modifier.height(4.dp))
-        
-        // 进度条
+
         LinearProgressIndicator(
             progress = progress,
             modifier = Modifier
@@ -342,3 +349,4 @@ private fun ReadingProgress(
         )
     }
 }
+

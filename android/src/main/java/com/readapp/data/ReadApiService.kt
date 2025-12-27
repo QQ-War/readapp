@@ -3,6 +3,8 @@ package com.readapp.data
 import com.google.gson.GsonBuilder
 import com.readapp.data.model.ApiResponse
 import com.readapp.data.model.Book
+import com.readapp.data.model.BookSource
+import com.readapp.data.model.BookSourcePageInfo
 import com.readapp.data.model.Chapter
 import com.readapp.data.model.HttpTTS
 import com.readapp.data.model.LoginResponse

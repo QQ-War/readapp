@@ -12,14 +12,16 @@ import com.readapp.data.UserPreferences
 import com.readapp.data.model.BookSource
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class SourceViewModel(application: Application) : AndroidViewModel(application) {
 
     private val userPreferences = UserPreferences(application)
+    private val accessTokenState = MutableStateFlow("")
     private val repository = ReadRepository { endpoint ->
-        ReadApiService.create(endpoint) { userPreferences.accessToken.value }
+        ReadApiService.create(endpoint) { accessTokenState.value }
     }
 
     private val _sources = MutableStateFlow<List<BookSource>>(emptyList())
@@ -32,6 +34,11 @@ class SourceViewModel(application: Application) : AndroidViewModel(application) 
     val errorMessage = _errorMessage.asStateFlow()
 
     init {
+        viewModelScope.launch {
+            userPreferences.accessToken.collect { token ->
+                accessTokenState.value = token
+            }
+        }
         fetchSources()
     }
 
@@ -44,9 +51,9 @@ class SourceViewModel(application: Application) : AndroidViewModel(application) 
             val serverUrl = userPreferences.serverUrl.first()
             val publicUrl = userPreferences.publicServerUrl.first().ifBlank { null }
             val token = userPreferences.accessToken.first()
-            
+
             if (token.isBlank()) {
-                _errorMessage.value = "用户未登录"
+                _errorMessage.value = "Not logged in"
                 _isLoading.value = false
                 return@launch
             }
@@ -60,9 +67,9 @@ class SourceViewModel(application: Application) : AndroidViewModel(application) 
             result.onSuccess {
                 _sources.value = it
             }.onFailure {
-                _errorMessage.value = it.message ?: "获取书源失败"
+                _errorMessage.value = it.message ?: "Failed to load sources"
             }
-            
+
             _isLoading.value = false
         }
     }
