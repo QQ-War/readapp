@@ -37,30 +37,11 @@ struct ReadingView: View {
             mainContent
             if isLoading { loadingOverlay }
         }
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button(action: { dismiss() }) {
-                    Image(systemName: "chevron.left")
-                }
-                .opacity(showUIControls ? 1 : 0)
-            }
-            ToolbarItem(placement: .principal) {
-                Text(chapters.indices.contains(currentChapterIndex) ? chapters[currentChapterIndex].title : "")
-                    .font(.caption)
-                    .lineLimit(1)
-                    .opacity(showUIControls ? 1 : 0)
-            }
-             ToolbarItem(placement: .navigationBarTrailing) {
-                // Balance the leading item
-                Color.clear.frame(width: 30, height: 30)
-            }
-        }
+        .toolbar(content: toolbarContent)
         .animation(.easeInOut(duration: 0.2), value: showUIControls)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
-        .toolbarBackground(.automatic, for: .navigationBar)
-        .toolbar(.visible, for: .navigationBar)
-        .toolbar(.hidden, for: .tabBar)
+        .applyNavigationToolbarStyle(showUIControls: showUIControls)
         .sheet(isPresented: $showChapterList) {
             ChapterListView(
                 chapters: chapters,
@@ -97,6 +78,26 @@ struct ReadingView: View {
                     lastTTSSentenceIndex = ttsManager.currentSentenceIndex
                 }
             }
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .navigationBarLeading) {
+            Button(action: { dismiss() }) {
+                Image(systemName: "chevron.left")
+            }
+            .opacity(showUIControls ? 1 : 0)
+        }
+        ToolbarItem(placement: .principal) {
+            Text(chapters.indices.contains(currentChapterIndex) ? chapters[currentChapterIndex].title : "")
+                .font(.caption)
+                .lineLimit(1)
+                .opacity(showUIControls ? 1 : 0)
+        }
+        ToolbarItem(placement: .navigationBarTrailing) {
+            // Balance the leading item
+            Color.clear.frame(width: 30, height: 30)
         }
     }
 
@@ -466,6 +467,20 @@ struct ReadingView: View {
             withAnimation { currentPageIndex += 1 }
         } else if currentChapterIndex < chapters.count - 1 {
             nextChapter()
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func applyNavigationToolbarStyle(showUIControls: Bool) -> some View {
+        if #available(iOS 16.0, *) {
+            self
+                .toolbarBackground(.automatic, for: .navigationBar)
+                .toolbar(showUIControls ? .visible : .hidden, for: .navigationBar)
+                .toolbar(.hidden, for: .tabBar)
+        } else {
+            self
         }
     }
 }
