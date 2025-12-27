@@ -4,6 +4,7 @@ import CoreText
 
 struct ReadingView: View {
     let book: Book
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var apiService: APIService
     @StateObject private var ttsManager = TTSManager.shared
     @StateObject private var preferences = UserPreferences.shared
@@ -12,6 +13,7 @@ struct ReadingView: View {
     @State private var chapters: [BookChapter] = []
     @State private var currentChapterIndex: Int
     @State private var currentContent = ""
+    @State private var rawContent = ""
     @State private var contentSentences: [String] = []
     @State private var isLoading = false
     @State private var showChapterList = false
@@ -39,7 +41,24 @@ struct ReadingView: View {
                 if preferences.readingMode == .horizontal && !ttsManager.isPlaying {
                     GeometryReader { geometry in
                         let contentInsets = EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16)
-                        TabView(selection: $currentPageIndex) {
+                        let width = geometry.size.width
+                        let tapHandler: (CGFloat) -> Void = { tapX in
+                            if showUIControls {
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    showUIControls = false
+                                }
+                            } else if tapX < width / 3 {
+                                goToPreviousPage()
+                            } else if tapX < width * 2 / 3 {
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    showUIControls = true
+                                }
+                            } else {
+                                goToNextPage()
+                            }
+                        }
+
+                        let tabView = TabView(selection: $currentPageIndex) {
                             ForEach(Array(paginatedPages.enumerated()), id: \.offset) { index, page in
                                 Text(page.text)
                                     .font(.system(size: preferences.fontSize))
@@ -62,81 +81,26 @@ struct ReadingView: View {
                         .onChange(of: preferences.lineSpacing) { _ in
                             repaginateContent(in: geometry.size, contentInsets: contentInsets)
                         }
-                    }
-                    .overlay {
-                        GeometryReader { geometry in
-                            let swipeGesture = DragGesture(minimumDistance: 20)
-                                .onEnded { value in
-                                    handleHorizontalSwipe(value)
-                                }
-                            if #available(iOS 17.0, *) {
-                                let singleTap = SpatialTapGesture(count: 1)
-                                    .onEnded { value in
-                                        let tapX = value.location.x
-                                        let width = geometry.size.width
-                                        if showUIControls {
-                                            withAnimation(.easeInOut(duration: 0.3)) {
-                                                showUIControls = false
-                                            }
-                                        } else if tapX < width / 3 {
-                                            goToPreviousPage()
-                                        } else if tapX < width * 2 / 3 {
-                                            withAnimation(.easeInOut(duration: 0.3)) {
-                                                showUIControls = true
-                                            }
-                                        } else {
-                                            goToNextPage()
-                                        }
-                                    }
-                                Color.clear
-                                    .contentShape(Rectangle())
-                                    .gesture(singleTap)
-                                    .simultaneousGesture(swipeGesture)
-                            } else {
-                                // Fallback for iOS < 17: use three tappable regions to mimic left/middle/right taps
-                                HStack(spacing: 0) {
-                                    Color.clear
-                                        .contentShape(Rectangle())
-                                        .onTapGesture {
-                                            if showUIControls {
-                                                withAnimation(.easeInOut(duration: 0.3)) {
-                                                    showUIControls = false
-                                                }
-                                            } else {
-                                                goToPreviousPage()
-                                            }
-                                        }
-                                        .frame(width: geometry.size.width / 3)
-                                    Color.clear
-                                        .contentShape(Rectangle())
-                                        .onTapGesture {
-                                            if showUIControls {
-                                                withAnimation(.easeInOut(duration: 0.3)) {
-                                                    showUIControls = false
-                                                }
-                                            } else {
-                                                withAnimation(.easeInOut(duration: 0.3)) {
-                                                    showUIControls = true
-                                                }
-                                            }
-                                        }
-                                        .frame(width: geometry.size.width / 3)
-                                    Color.clear
-                                        .contentShape(Rectangle())
-                                        .onTapGesture {
-                                            if showUIControls {
-                                                withAnimation(.easeInOut(duration: 0.3)) {
-                                                    showUIControls = false
-                                                }
-                                            } else {
-                                                goToNextPage()
-                                            }
-                                        }
-                                        .frame(width: geometry.size.width / 3)
-                                }
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                .simultaneousGesture(swipeGesture)
+                        .onChange(of: currentPageIndex) { newIndex in
+                            if paginatedPages.indices.contains(newIndex) {
+                                lastTTSSentenceIndex = paginatedPages[newIndex].startSentenceIndex
                             }
+                        }
+
+                        if #available(iOS 17.0, *) {
+                            let singleTap = SpatialTapGesture(count: 1)
+                                .onEnded { value in
+                                    tapHandler(value.location.x)
+                                }
+                            tabView.simultaneousGesture(singleTap)
+                        } else {
+                            let fallbackTap = TapGesture()
+                                .onEnded {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        showUIControls.toggle()
+                                    }
+                                }
+                            tabView.simultaneousGesture(fallbackTap)
                         }
                     }
                 } else {
@@ -210,33 +174,26 @@ struct ReadingView: View {
                     }
                 }
                 
-                Group {
-                    if ttsManager.isPlaying && !contentSentences.isEmpty {
-                        TTSControlBar(
-                            ttsManager: ttsManager,
-                            currentChapterIndex: currentChapterIndex,
-                            chaptersCount: chapters.count,
-                            onPreviousChapter: previousChapter,
-                            onNextChapter: nextChapter,
-                            onShowChapterList: { showChapterList = true }
-                        )
-                    } else {
-                        NormalControlBar(
-                            currentChapterIndex: currentChapterIndex,
-                            chaptersCount: chapters.count,
-                            onPreviousChapter: previousChapter,
-                            onNextChapter: nextChapter,
-                            onShowChapterList: { showChapterList = true },
-                            onToggleTTS: toggleTTS,
-                            onShowFontSettings: { showFontSettings = true }
-                        )
+                if preferences.readingMode != .horizontal {
+                    controlBar
+                        .opacity(showUIControls ? 1 : 0)
+                        .allowsHitTesting(showUIControls)
+                        .accessibilityHidden(!showUIControls)
+                }
+            }
+            
+
+            if showUIControls {
+                GeometryReader { proxy in
+                    VStack {
+                        topBar
+                            .padding(.top, proxy.safeAreaInsets.top + 6)
+                        Spacer()
                     }
                 }
-                .opacity(showUIControls ? 1 : 0)
                 .allowsHitTesting(showUIControls)
                 .accessibilityHidden(!showUIControls)
             }
-            
             if isLoading {
                 ProgressView("加载中...")
                     .padding()
@@ -244,9 +201,19 @@ struct ReadingView: View {
                     .cornerRadius(10)
                     .shadow(radius: 10)
             }
+            if preferences.readingMode == .horizontal {
+                VStack {
+                    Spacer()
+                    controlBar
+                }
+                .opacity(showUIControls ? 1 : 0)
+                .allowsHitTesting(showUIControls)
+                .accessibilityHidden(!showUIControls)
+            }
         }
         .navigationTitle(book.name ?? "阅读")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarHidden(true)
         .sheet(isPresented: $showChapterList) {
             ChapterListView(
                 chapters: chapters,
@@ -264,6 +231,9 @@ struct ReadingView: View {
         .task {
             await loadChapters()
             await replaceRuleViewModel.fetchRules()
+        }
+        .onChange(of: replaceRuleViewModel.rules) { _ in
+            updateProcessedContent(from: rawContent)
         }
         .alert("错误", isPresented: .constant(errorMessage != nil)) {
             Button("确定") { errorMessage = nil }
@@ -284,6 +254,18 @@ struct ReadingView: View {
     }
     
     // MARK: - 内容处理
+
+    private func updateProcessedContent(from rawText: String) {
+        if rawText.isEmpty {
+            currentContent = "章节内容为空"
+            contentSentences = []
+            return
+        }
+        let processedContent = applyReplaceRules(to: rawText)
+        currentContent = processedContent
+        contentSentences = splitIntoParagraphs(processedContent)
+    }
+
     private func applyReplaceRules(to content: String) -> String {
         var processedContent = content
         let enabledRules = replaceRuleViewModel.rules.filter { $0.isEnabled == true }
@@ -347,11 +329,11 @@ struct ReadingView: View {
                         currentContent = "章节内容为空"
                         errorMessage = "章节内容为空"
                         contentSentences = []
+                        rawContent = ""
                     } else {
-                        var processedContent = removeHTMLAndSVG(content)
-                        processedContent = applyReplaceRules(to: processedContent)
-                        currentContent = processedContent
-                        contentSentences = splitIntoParagraphs(processedContent)
+                        let cleanedContent = removeHTMLAndSVG(content)
+                        rawContent = cleanedContent
+                        updateProcessedContent(from: cleanedContent)
                     }
                     isLoading = false
                     
@@ -409,6 +391,7 @@ struct ReadingView: View {
             : nil
         let fallbackIndex = lastTTSSentenceIndex ?? Int(book.durChapterPos ?? 0)
         let startIndex = preferences.readingMode == .horizontal ? (pageStartIndex ?? fallbackIndex) : fallbackIndex
+        lastTTSSentenceIndex = startIndex
         
         ttsManager.startReading(
             text: currentContent,
@@ -489,18 +472,54 @@ struct ReadingView: View {
         }
     }
 
-    private func handleHorizontalSwipe(_ value: DragGesture.Value) {
-        let horizontal = value.translation.width
-        let vertical = value.translation.height
-        guard abs(horizontal) > abs(vertical), abs(horizontal) > 40 else { return }
-        if horizontal < 0 {
-            goToNextPage()
+}
+
+    @ViewBuilder
+    private var controlBar: some View {
+        if ttsManager.isPlaying && !contentSentences.isEmpty {
+            TTSControlBar(
+                ttsManager: ttsManager,
+                currentChapterIndex: currentChapterIndex,
+                chaptersCount: chapters.count,
+                onPreviousChapter: previousChapter,
+                onNextChapter: nextChapter,
+                onShowChapterList: { showChapterList = true }
+            )
         } else {
-            goToPreviousPage()
+            NormalControlBar(
+                currentChapterIndex: currentChapterIndex,
+                chaptersCount: chapters.count,
+                onPreviousChapter: previousChapter,
+                onNextChapter: nextChapter,
+                onShowChapterList: { showChapterList = true },
+                onToggleTTS: toggleTTS,
+                onShowFontSettings: { showFontSettings = true }
+            )
         }
     }
 
-}
+    @ViewBuilder
+    private var topBar: some View {
+        HStack(spacing: 12) {
+            Button(action: { dismiss() }) {
+                Image(systemName: "chevron.left")
+                    .font(.title3)
+                    .frame(width: 36, height: 36)
+            }
+            Spacer()
+            Text(book.name ?? "阅读")
+                .font(.headline)
+                .lineLimit(1)
+            Spacer()
+            Color.clear
+                .frame(width: 36, height: 36)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color(UIColor.systemBackground).opacity(0.95))
+        .shadow(color: Color.black.opacity(0.1), radius: 4, y: 2)
+    }
+
 
 // MARK: - Text Paginator
 struct PaginatedPage {
