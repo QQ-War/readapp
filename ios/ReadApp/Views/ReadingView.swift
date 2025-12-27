@@ -594,17 +594,21 @@ struct TextPaginator {
         var pages: [PaginatedPage] = []
         var location = 0
         while location < attributedText.length {
-            let range = CFRange(location: location, length: attributedText.length - location)
             let path = CGPath(rect: bounds, transform: nil)
-            let frame = CTFramesetterCreateFrame(framesetter, range, path, nil)
+            let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: location, length: 0), path, nil)
             let visibleRange = CTFrameGetVisibleStringRange(frame)
-            let length = visibleRange.length
-            if length == 0 { break }
-            let pageRange = NSRange(location: visibleRange.location, length: length)
-            let startSentenceIndex = sentenceIndex(for: visibleRange.location, in: paragraphStarts)
+
+            if visibleRange.length == 0 {
+                break
+            }
+
+            let pageRange = NSRange(location: location, length: visibleRange.length)
+            let startSentenceIndex = sentenceIndex(for: location, in: paragraphStarts)
             pages.append(PaginatedPage(range: pageRange, startSentenceIndex: startSentenceIndex))
-            location = visibleRange.location + length
+
+            location += visibleRange.length
         }
+
 
         return pages
     }

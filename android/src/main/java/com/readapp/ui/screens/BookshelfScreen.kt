@@ -33,7 +33,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.readapp.Screen
@@ -44,7 +43,7 @@ import com.readapp.viewmodel.BookViewModel
 @Composable
 fun BookshelfScreen(
     mainNavController: NavController,
-    bookViewModel: BookViewModel = viewModel(factory = BookViewModel.Factory)
+    bookViewModel: BookViewModel
 ) {
     val books by bookViewModel.books.collectAsState()
     val isLoading by bookViewModel.isLoading.collectAsState()

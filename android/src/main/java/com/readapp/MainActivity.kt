@@ -93,7 +93,10 @@ fun ReadAppMain() {
 
             // 书架页面（主页），现在由 MainScreen 管理
             composable(Screen.Bookshelf.route) {
-                MainScreen(mainNavController = navController)
+                MainScreen(
+                    mainNavController = navController,
+                    bookViewModel = bookViewModel
+                )
             }
 
             // 阅读页面（集成听书功能）

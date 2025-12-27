@@ -17,10 +17,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.readapp.Screen
+import com.readapp.viewmodel.BookViewModel
 
 @Composable
 fun MainScreen(
-    mainNavController: NavController
+    mainNavController: NavController,
+    bookViewModel: BookViewModel
 ) {
     val localNavController = rememberNavController()
     Scaffold(
@@ -57,7 +59,10 @@ fun MainScreen(
             NavHost(localNavController, startDestination = BottomNavItem.Bookshelf.route) {
                 composable(BottomNavItem.Bookshelf.route) {
                     // Pass the main NavController to allow navigation to Reading/Settings
-                    BookshelfScreen(mainNavController = mainNavController)
+                    BookshelfScreen(
+                        mainNavController = mainNavController,
+                        bookViewModel = bookViewModel
+                    )
                 }
                 composable(BottomNavItem.BookSource.route) {
                     SourceListScreen()
